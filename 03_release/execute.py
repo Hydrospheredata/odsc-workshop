@@ -30,11 +30,11 @@ if __name__ == "__main__":
     ]
 
     metadata = {
-        'learning_rate': arguments['learning_rate'],
-        'epochs': arguments['epochs'],
-        'batch_size': arguments['batch_size'],
+        'learning_rate': str(arguments['learning_rate']),
+        'epochs': str(arguments['epochs']),
+        'batch_size': str(arguments['batch_size']),
         'accuracy': str(arguments['accuracy']),
-        'data': arguments['data_path']
+        'data': str(arguments['data_path'])
     }
 
     signature = sdk.Signature('predict')\
@@ -56,7 +56,8 @@ if __name__ == "__main__":
         .with_runtime('hydrosphere/serving-runtime-tensorflow-1.13.1:latest')\
         .with_metadata(metadata)\
         .with_payload(payload)\
-        .with_signature(signature)
+        .with_signature(signature)\
+        .with_monitoring(monitoring)
 
     result = model.apply(arguments['hydrosphere_address'])
     print(result)
