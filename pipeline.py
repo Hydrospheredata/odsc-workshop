@@ -1,4 +1,5 @@
 import kfp.dsl as dsl 
+from kfp.aws import use_aws_secret
 import kubernetes.client.models as k8s
 import argparse
 
@@ -6,6 +7,7 @@ import argparse
 @dsl.pipeline(name="mnist", description="MNIST classifier")
 def pipeline_definition(
     hydrosphere_address,
+    uuid,
     mount_path='/storage',
     learning_rate="0.01",
     epochs="10",
@@ -13,21 +15,16 @@ def pipeline_definition(
     model_name="mnist",
     acceptable_accuracy="0.90",
 ):
-    
-    storage_pvc = k8s.V1PersistentVolumeClaimVolumeSource(claim_name="storage")
-    storage_volume = k8s.V1Volume(name="storage", persistent_volume_claim=storage_pvc)
-    storage_volume_mount = k8s.V1VolumeMount(
-        mount_path="{{workflow.parameters.mount-path}}", name="storage")
-    
+    uuid_env = k8s.V1EnvVar(name="UUID", value=uuid)
+
     # 1. Download MNIST data
     download = dsl.ContainerOp(
         name="download",
         image="tidylobster/mnist-pipeline-download:latest",       # <-- Replace with correct docker image
-        file_outputs={"data_path": "/data_path.txt"},
-        arguments=["--mount-path", mount_path]
-    )
-    download.add_volume(storage_volume)
-    download.add_volume_mount(storage_volume_mount)
+        file_outputs={"data_path": "/data_path.txt"})
+    
+    download.apply(use_aws_secret('aws-secret', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'))
+    download.add_env_variable(uuid_env)
 
     # 2. Train and save a MNIST classifier using Tensorflow
     train = dsl.ContainerOp(
@@ -37,19 +34,18 @@ def pipeline_definition(
             "accuracy": "/accuracy.txt",
             "model_path": "/model_path.txt",
         },
-        command=[
-            "python", "train-estimator.py",
+        arguments=[
             "--data-path", download.outputs["data_path"], 
-            "--mount-path", mount_path,
             "--learning-rate", learning_rate,
             "--epochs", epochs,
             "--batch-size", batch_size
         ]
     )
-    train.add_volume(storage_volume)
-    train.add_volume_mount(storage_volume_mount)
-    
     train.after(download)
+
+    train.apply(use_aws_secret('aws-secret', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'))
+    train.add_env_variable(uuid_env)
+
     train.set_memory_request('1G')
     train.set_cpu_request('1')
 
@@ -57,12 +53,11 @@ def pipeline_definition(
     release = dsl.ContainerOp(
         name="release",
         image="tidylobster/mnist-pipeline-release:latest",         # <-- Replace with correct docker image
-        file_outputs={"model-version": "/model-version.txt"},
+        file_outputs={"model_version": "/model_version.txt"},
         arguments=[
             "--data-path", download.outputs["data_path"],
-            "--mount-path", mount_path,
             "--model-name", model_name,
-            "--model-path", train.outputs["model_path"],
+            "--models-path", train.outputs["model_path"],
             "--accuracy", train.outputs["accuracy"],
             "--hydrosphere-address", hydrosphere_address,
             "--learning-rate", learning_rate,
@@ -70,41 +65,43 @@ def pipeline_definition(
             "--batch-size", batch_size,
         ]
     )
-    release.add_volume(storage_volume) 
-    release.add_volume_mount(storage_volume_mount)
-    
     release.after(train)
+    
+    release.apply(use_aws_secret('aws-secret', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'))
+    release.add_env_variable(uuid_env)
     
     # 4. Deploy to stage application
     deploy_to_stage = dsl.ContainerOp(
         name="deploy_to_stage",
         image="tidylobster/mnist-pipeline-deploy-to-stage:latest",        # <-- Replace with correct docker image
-        file_outputs={"stage-app-name": "/stage-app-name.txt"},
+        file_outputs={"stage_app_name": "/stage_app_name.txt"},
         arguments=[
-            "--model-version", release.outputs["model-version"],
+            "--model-version", release.outputs["model_version"],
             "--hydrosphere-address", hydrosphere_address,
             "--model-name", model_name,
         ],
     )
     deploy_to_stage.after(release)
 
+    deploy_to_stage.apply(use_aws_secret('aws-secret', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'))
+    deploy_to_stage.add_env_variable(uuid_env)
+
     # 5. Test the model 
     test = dsl.ContainerOp(
         name="test",
         image="tidylobster/mnist-pipeline-test:latest",               # <-- Replace with correct docker image
         arguments=[
-            "--stage-app-name", deploy_to_stage.outputs["stage-app-name"], 
             "--data-path", download.outputs["data_path"],
-            "--mount-path", mount_path,
             "--hydrosphere-address", hydrosphere_address,
             "--acceptable-accuracy", acceptable_accuracy,
             "--model-name", model_name, 
         ],
     )
-    test.add_volume(storage_volume) 
-    test.add_volume_mount(storage_volume_mount)
-    
     test.after(deploy_to_stage)
+
+    test.add_env_variable(uuid_env)
+    test.apply(use_aws_secret('aws-secret', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'))
+
     test.set_retry(3)
 
     # 6. Deploy to production application
@@ -112,12 +109,15 @@ def pipeline_definition(
         name="deploy_to_prod",
         image="tidylobster/mnist-pipeline-deploy-to-prod:latest",              # <-- Replace with correct docker image
         arguments=[
-            "--model-version", release.outputs["model-version"],
+            "--model-version", release.outputs["model_version"],
             "--model-name", model_name,
             "--hydrosphere-address", hydrosphere_address
         ],
     )
     deploy_to_prod.after(test)
+
+    deploy_to_prod.apply(use_aws_secret('aws-secret', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'))
+    deploy_to_prod.add_env_variable(uuid_env)
 
 
 if __name__ == "__main__":
