@@ -13,9 +13,8 @@ if __name__ == '__main__':
     arguments = args.__dict__
 
     app_name = '{}-app'.format(arguments['model_name'])
-    model = '{}:{}'.format(arguments['model_name'], arguments['model_version'])
-
+    model = sdk.Model.from_existing(args.model_name, args.model_version)
     application = sdk.Application.singular(app_name, model)
-
-    result = application.apply(arguments['hydrosphere_address'])
+    
+    result = application.apply(args.hydrosphere_address)
     print(result)
