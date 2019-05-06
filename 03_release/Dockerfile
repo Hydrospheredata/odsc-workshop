@@ -1,4 +1,6 @@
 FROM hydrosphere/odsc-workshop-base:latest
-ADD ./execute.sh /src/
+
+ADD ./release.py /src/
+
 WORKDIR /src/
 ENTRYPOINT [ "python", "release.py" ]
