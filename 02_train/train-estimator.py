@@ -1,7 +1,8 @@
 import os, json, sys
 import tensorflow as tf
 import numpy as np
-import argparse
+import argparse, boto3
+import namesgenerator
 
 
 def input_fn(imgs, labels, batch_size=256, epochs=10):
@@ -12,17 +13,10 @@ def input_fn(imgs, labels, batch_size=256, epochs=10):
 
 if __name__ == "__main__":
     tf.logging.set_verbosity(tf.logging.INFO)
+
     parser = argparse.ArgumentParser()
-    
     parser.add_argument(
-        '--data-path', 
-        help='Path, where the current run\'s data was stored',
-        required=True)
-    parser.add_argument(
-        '--mount-path',
-        help='Path to PersistentVolumeClaim, deployed on the cluster',
-        required=True)
-    
+        '--data-path', help='Path, where the current run\'s data was stored', required=True)
     parser.add_argument(
         '--learning-rate', type=float, default=0.01)
     parser.add_argument(
@@ -30,19 +24,24 @@ if __name__ == "__main__":
     parser.add_argument(
         '--batch-size', type=int, default=256)
     parser.add_argument(
-        '--dev', help="Flag for development purposes", type=bool, default=False)
+        '--dev', help='Flag for development purposes', action="store_true")
     
     args = parser.parse_args()
-    arguments = args.__dict__
+    s3 = boto3.resource('s3')
 
-    models_path = os.path.join(arguments["mount_path"], "models")
+    uuid = os.environ.get("UUID", namesgenerator.get_random_name())
+    models_path = os.path.join(uuid, "models", "mnist")
 
+    # Download training/testing data
+    s3.Object('odsc-workshop', os.path.join(args.data_path, "train.npz")).download_file('./train.npz')
+    s3.Object('odsc-workshop', os.path.join(args.data_path, "test.npz")).download_file('./test.npz')
+    
     # Prepare data inputs
-    with np.load(os.path.join(arguments["data_path"], "train.npz")) as data:
+    with np.load("./train.npz") as data:
         train_imgs = data["imgs"]
         train_labels = data["labels"].astype(int)
     
-    with np.load(os.path.join(arguments["data_path"], "test.npz")) as data:
+    with np.load("./test.npz") as data:
         test_imgs = data["imgs"]
         test_labels = data["labels"].astype(int)
 
@@ -50,20 +49,20 @@ if __name__ == "__main__":
     
     train_fn = input_fn(
         train_imgs, train_labels, 
-        batch_size=arguments["batch_size"], 
-        epochs=arguments["epochs"])
+        batch_size=args.batch_size, 
+        epochs=args.epochs)
     
     test_fn = input_fn(
         test_imgs, test_labels,
-        batch_size=arguments["batch_size"], 
-        epochs=arguments["epochs"])
+        batch_size=args.batch_size, 
+        epochs=args.epochs)
     
     # Create the model
     estimator = tf.estimator.DNNClassifier(
         n_classes=len(np.unique(np.hstack([train_labels, test_labels]))),
         hidden_units=[256, 64],
         feature_columns=[img_feature_column],
-        optimizer=tf.train.AdamOptimizer(learning_rate=arguments["learning_rate"]))
+        optimizer=tf.train.AdamOptimizer(learning_rate=args.learning_rate))
 
     # Train and evaluate the model
     estimator.train(train_fn)
@@ -77,8 +76,16 @@ if __name__ == "__main__":
     model_save_path = estimator.export_savedmodel(models_path, serving_input_receiver_fn)
     model_save_path = model_save_path.decode()
 
+    # Upload model to S3
+    for root, dirs, files in os.walk(model_save_path):
+        for file in files:
+            print("Uploading {} to S3".format(file), flush=True)
+
+            location = os.path.join(root, file)
+            s3.meta.client.upload_file(location, "odsc-workshop", location)
+
     # Perform metrics calculations
-    if arguments["dev"]: 
+    if args.dev: 
         accuracy_file = "./accuracy.txt"
         metrics_file = "./mlpipeline-metrics.json"
         model_path = "./model_path.txt"

@@ -78,7 +78,7 @@ def download_mnist(base_url):
 if __name__ == "__main__": 
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        '--dev', help='Flag to turn on development mode', action="store_true")
+        '--dev', help='Flag for development purposes', action="store_true")
     
     args = parser.parse_args()
     s3 = boto3.resource('s3')
