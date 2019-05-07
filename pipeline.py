@@ -18,7 +18,7 @@ def pipeline_definition(
     # 1. Download MNIST data
     download = dsl.ContainerOp(
         name="download",
-        image="tidylobster/mnist-pipeline-download:latest",  # <-- Replace with correct docker image
+        image="hydrosphere/mnist-pipeline-download:v1",  # <-- Replace with correct docker image
         file_outputs={"data_path": "/data_path.txt"},
         arguments=["--hydrosphere-address", hydrosphere_address]
     ).apply(use_aws_secret())
@@ -26,7 +26,7 @@ def pipeline_definition(
     # 2. Train and save a MNIST classifier using Tensorflow
     train = dsl.ContainerOp(
         name="train",
-        image="tidylobster/mnist-pipeline-train:latest",  # <-- Replace with correct docker image
+        image="hydrosphere/mnist-pipeline-train:v1",  # <-- Replace with correct docker image
         file_outputs={
             "accuracy": "/accuracy.txt",
             "model_path": "/model_path.txt",
@@ -47,7 +47,7 @@ def pipeline_definition(
     # 3. Release trained model to the cluster
     release = dsl.ContainerOp(
         name="release",
-        image="tidylobster/mnist-pipeline-release:latest",  # <-- Replace with correct docker image
+        image="hydrosphere/mnist-pipeline-release:v1",  # <-- Replace with correct docker image
         file_outputs={"model_version": "/model_version.txt"},
         arguments=[
             "--data-path", download.outputs["data_path"],
@@ -65,7 +65,7 @@ def pipeline_definition(
     # 4. Deploy model to stage application
     deploy_to_stage = dsl.ContainerOp(
         name="deploy_to_stage",
-        image="tidylobster/mnist-pipeline-deploy-to-stage:latest",  # <-- Replace with correct docker image
+        image="hydrosphere/mnist-pipeline-deploy-to-stage:v1",  # <-- Replace with correct docker image
         file_outputs={"stage_app_name": "/stage_app_name.txt"},
         arguments=[
             "--model-version", release.outputs["model_version"],
@@ -78,7 +78,7 @@ def pipeline_definition(
     # 5. Test the model via stage application
     test = dsl.ContainerOp(
         name="test",
-        image="tidylobster/mnist-pipeline-test:latest",  # <-- Replace with correct docker image
+        image="hydrosphere/mnist-pipeline-test:v1",  # <-- Replace with correct docker image
         arguments=[
             "--data-path", download.outputs["data_path"],
             "--hydrosphere-address", hydrosphere_address,
@@ -93,7 +93,7 @@ def pipeline_definition(
     # 6. Deploy model to production application
     deploy_to_prod = dsl.ContainerOp(
         name="deploy_to_prod",
-        image="tidylobster/mnist-pipeline-deploy-to-prod:latest",  # <-- Replace with correct docker image
+        image="hydrosphere/mnist-pipeline-deploy-to-prod:v1",  # <-- Replace with correct docker image
         arguments=[
             "--model-version", release.outputs["model_version"],
             "--model-name", model_name,
