@@ -31,6 +31,5 @@ result = client.run_pipeline(
     experiment_id, run_name, args.file,
     {
         "hydrosphere-address": f"http://{args.namespace}.serving.odsc.k8s.hydrosphere.io",
-        "uuid": "cdeb0b8f",
     }
 )
