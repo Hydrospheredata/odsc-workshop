@@ -13,9 +13,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     app_name = f'{args.model_name}-stage-app'
-    with open("./stage_app_name.txt" if args.dev else "/stage_app_name.txt", 'w') as file:
-        file.write(app_name)
-
     model = sdk.Model.from_existing(args.model_name, args.model_version)
     application = sdk.Application.singular(app_name, model)
     

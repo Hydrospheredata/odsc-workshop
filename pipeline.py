@@ -66,7 +66,6 @@ def pipeline_definition(
     deploy_to_stage = dsl.ContainerOp(
         name="deploy_to_stage",
         image="hydrosphere/mnist-pipeline-deploy-to-stage:v1",  # <-- Replace with correct docker image
-        file_outputs={"stage_app_name": "/stage_app_name.txt"},
         arguments=[
             "--model-version", release.outputs["model_version"],
             "--hydrosphere-address", hydrosphere_address,
