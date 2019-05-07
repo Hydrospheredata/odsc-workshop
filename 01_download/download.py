@@ -2,7 +2,7 @@ from PIL import Image
 import struct, numpy, boto3
 import os, gzip, tarfile, shutil, glob
 import urllib, urllib.parse, urllib.request
-import datetime, argparse, namesgenerator
+import datetime, argparse
 
 
 filenames = [
@@ -21,7 +21,7 @@ def download_files(base_url, filenames=None):
         filenames = globals()["filenames"]
     
     for file in filenames:
-        print("Started downloading {}".format(file), flush=True)
+        print(f"Started downloading {file}", flush=True)
         download_url = urllib.parse.urljoin(base_url, file)
         download_path = os.path.join('./', file)
         local_file, _ = urllib.request.urlretrieve(download_url, download_path)
@@ -31,7 +31,7 @@ def download_files(base_url, filenames=None):
 def unpack_archive(file):
     """ Unpack compressed file """
 
-    print("Unpacking archive {}".format(file), flush=True)
+    print(f"Unpacking archive {file}", flush=True)
     with gzip.open(file, 'rb') as f_in, open(file[:-3],'wb') as f_out:
         shutil.copyfileobj(f_in, f_out)
     os.remove(file)
@@ -40,7 +40,7 @@ def unpack_archive(file):
 def process_images(dataset):
     """ Preprocess downloaded MNIST datasets """
     
-    print("Processing images {}".format(dataset), flush=True)
+    print(f"Processing images {dataset}", flush=True)
     label_file = dataset + '-labels-idx1-ubyte'
     with open(label_file, 'rb') as file:
         _, num = struct.unpack(">II", file.read(8))
@@ -77,23 +77,24 @@ def download_mnist(base_url):
 
 if __name__ == "__main__": 
     parser = argparse.ArgumentParser()
+    parser.add_argument('--hydrosphere-address', required=True)
     parser.add_argument(
-        '--dev', help='Flag for development purposes', action="store_true")
+        '--dev', help='Flag for development mode', action="store_true")
     
     args = parser.parse_args()
     s3 = boto3.resource('s3')
 
     # Define the path, where to store files
-    uuid = os.environ.get("UUID", namesgenerator.get_random_name())
-    data_path = os.path.join(uuid, "data", "mnist", 
-        str(datetime.datetime.now().timestamp()).split(".")[0])
+    namespace = urllib.parse.urlparse(args.hydrosphere_address).netloc.split(".")[0]
+    data_path = os.path.join(namespace, "data", "mnist", 
+        str(round(datetime.datetime.now().timestamp())))
 
     # Download and process MNIST files
     processed_files = download_mnist("http://yann.lecun.com/exdb/mnist/")
 
     # Upload files to S3 
     for filename in processed_files:
-        print("Uploading {} to S3".format(filename), flush=True)
+        print(f"Uploading {filename} to S3", flush=True)
         s3.meta.client.upload_file(
             filename, "odsc-workshop", os.path.join(data_path, filename))
     

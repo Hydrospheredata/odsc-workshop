@@ -22,29 +22,24 @@ if __name__ == "__main__":
         labels = data["labels"].astype(int)[:100]
     
     requests_delay = 0.2
-    application_name = "{}-stage-app".format(args.model_name)
-    service_link = "{}/gateway/application/{}".format(
-        args.hydrosphere_address, application_name)
+    application_name = f"{args.model_name}-stage-app"
+    service_link = f"{args.hydrosphere_address}/gateway/application/{application_name}"
 
-    print("Using URL :: {}".format(service_link), flush=True)
+    print(f"Using URL :: {service_link}", flush=True)
 
     predicted = []
     for index, image in enumerate(images):
         image = image.reshape((1, 28, 28, 1))
         response = requests.post(url=service_link, json={'imgs': [image.tolist()]})
         print(
-            "{id} | {percentage}%\n{data}".format(
-                id=str(index), 
-                percentage=str(round(index / len(images) * 100)), 
-                data=response.text
-            ), 
+            f"{index} | {round(index / len(images) * 100)}% \n{response.text}", 
             flush=True
         )
         predicted.append(response.json()["class_ids"][0][0])
         time.sleep(requests_delay)
     
     accuracy = np.sum(labels == np.array(predicted)) / len(labels)
-    print("Achieved accuracy of ", accuracy, flush=True)
+    print(f"Achieved accuracy of {accuracy}", flush=True)
 
     assert accuracy > args.acceptable_accuracy, \
-        "Accuracy is not acceptable ({} < {})".format(accuracy, args.acceptable_accuracy)
+        f"Accuracy is not acceptable ({accuracy} < {args.acceptable_accuracy})"

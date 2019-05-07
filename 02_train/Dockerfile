@@ -1,6 +1,6 @@
 FROM hydrosphere/odsc-workshop-base:latest
 
-ADD ./train-estimator.py /src/
+ADD ./train.py /src/
 
 WORKDIR /src/
-ENTRYPOINT [ "python", "train-estimator.py" ]
+ENTRYPOINT [ "python", "train.py" ]
