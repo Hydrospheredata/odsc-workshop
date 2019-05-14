@@ -10,5 +10,5 @@ __pycache__/
 *.tar.gz
 *.db
 *.yaml*
-shell.sh
+bash.sh
 .venv
