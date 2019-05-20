@@ -107,7 +107,7 @@ with tf.Session() as sess:
 
     # Save model
     signature_map = {
-        "infer": tf.saved_model.signature_def_utils.predict_signature_def(
+        "predict": tf.saved_model.signature_def_utils.predict_signature_def(
             inputs={
                 "imgs": imgs_placeholder,
                 "probabilities": tf.placeholder(dtype=tf.float32, shape=(None, num_classes)),

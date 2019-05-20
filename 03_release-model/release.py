@@ -8,6 +8,7 @@ if __name__ == "__main__":
     parser.add_argument('--data-path', required=True)
     parser.add_argument('--models-path', required=True)
     parser.add_argument('--hydrosphere-address', required=True)
+    parser.add_argument('--autoencoder-app', required=True)
     parser.add_argument('--model-name', required=True)
     parser.add_argument('--accuracy')
     parser.add_argument('--loss')
@@ -70,7 +71,7 @@ if __name__ == "__main__":
             .with_spec(
                 kind='ImageAEMetricSpec', 
                 threshold=0.15, 
-                application='mnist-autoencoder-app'
+                application=args.autoencoder_app
             )
     ]
 
