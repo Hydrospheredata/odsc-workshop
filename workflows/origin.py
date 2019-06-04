@@ -9,10 +9,12 @@ tag = os.environ.get("TAG", "latest")
 @dsl.pipeline(name="mnist", description="MNIST classifier")
 def pipeline_definition(
     hydrosphere_address,
-    learning_rate="0.01",
-    epochs="10",
-    autoencoder_steps="1000",
-    batch_size="256",
+    model_learning_rate="0.01",
+    model_epochs="10",
+    model_batch_size="256",
+    autoencoder_learning_rate="0.01",
+    autoencoder_steps="3500",
+    autoencoder_batch_size="256",
     model_name="mnist",
     model_autoencoder_name="mnist_autoencoder",
     acceptable_accuracy="0.90",
@@ -37,9 +39,9 @@ def pipeline_definition(
         },
         arguments=[
             "--data-path", download.outputs["data_path"], 
-            "--learning-rate", learning_rate,
-            "--epochs", epochs,
-            "--batch-size", batch_size,
+            "--learning-rate", model_learning_rate,
+            "--epochs", model_epochs,
+            "--batch-size", model_batch_size,
             "--hydrosphere-address", hydrosphere_address
         ]
     ).apply(use_aws_secret())
@@ -58,8 +60,8 @@ def pipeline_definition(
         arguments=[
             "--data-path", download.outputs["data_path"], 
             "--steps", autoencoder_steps, 
-            "--learning-rate", learning_rate,
-            "--batch-size", batch_size,
+            "--learning-rate", autoencoder_learning_rate,
+            "--batch-size", autoencoder_batch_size,
             "--hydrosphere-address", hydrosphere_address
         ]
     ).apply(use_aws_secret())
@@ -81,8 +83,8 @@ def pipeline_definition(
             "--classes", train_autoencoder.outputs["classes"],
             "--loss", train_autoencoder.outputs["loss"],
             "--hydrosphere-address", hydrosphere_address,
-            "--learning-rate", learning_rate,
-            "--batch-size", batch_size,
+            "--learning-rate", autoencoder_learning_rate,
+            "--batch-size", autoencoder_batch_size,
             "--steps", autoencoder_steps, 
         ]
     ).apply(use_aws_secret())
@@ -119,9 +121,9 @@ def pipeline_definition(
             "--classes", train_model.outputs["classes"],
             "--accuracy", train_model.outputs["accuracy"],
             "--hydrosphere-address", hydrosphere_address,
-            "--learning-rate", learning_rate,
-            "--epochs", epochs,
-            "--batch-size", batch_size,
+            "--learning-rate", model_learning_rate,
+            "--epochs", model_epochs,
+            "--batch-size", model_batch_size,
         ]
     ).apply(use_aws_secret())
 
