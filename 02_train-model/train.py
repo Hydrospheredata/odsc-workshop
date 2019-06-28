@@ -1,4 +1,4 @@
-import os, json, sys
+import os, json, sys, shutil, tempfile
 import tensorflow as tf
 import numpy as np
 import argparse, boto3
@@ -10,6 +10,14 @@ def input_fn(imgs, labels, batch_size=256, epochs=10, shuffle=True):
     return tf.estimator.inputs.numpy_input_fn(
         x={"imgs": imgs.reshape((len(imgs), 28, 28, 1))}, 
         y=labels, shuffle=shuffle, batch_size=batch_size, num_epochs=epochs)
+
+
+def relative_move(from_dir, to_dir):
+    for root, dirs, files in os.walk(from_dir):
+        for file in files:
+            relpath = os.path.relpath(root, from_dir)
+            os.makedirs(os.path.join(to_dir, relpath), exist_ok=True)
+            shutil.move(os.path.join(root, file), os.path.join(to_dir, relpath, file)) 
 
 
 if __name__ == "__main__":
@@ -82,24 +90,44 @@ if __name__ == "__main__":
     model_save_path = estimator.export_savedmodel(models_path, serving_input_receiver_fn)
     model_save_path = model_save_path.decode()
 
+    # Clean up folder structure
+    timestamp = os.path.basename(model_save_path)
+    final_dir = os.path.join(models_path, timestamp)
+    saved_model_dir = os.path.join(final_dir, "saved_model")
+    
+    with tempfile.TemporaryDirectory() as tmpdir1, tempfile.TemporaryDirectory() as tmpdir2:
+        relative_move(model_save_path, tmpdir1)
+        shutil.rmtree(model_save_path)
+
+        relative_move(models_path, tmpdir2)
+        shutil.rmtree(models_path)
+        
+        os.makedirs(final_dir)
+        os.makedirs(saved_model_dir)
+
+        relative_move(tmpdir1, saved_model_dir)
+        relative_move(tmpdir2, final_dir)
+
     # Upload model to S3
-    for root, dirs, files in os.walk(model_save_path):
+    for root, dirs, files in os.walk(final_dir):
         for file in files:
             print(f"Uploading {file} to S3", flush=True)
 
             location = os.path.join(root, file)
-            s3.meta.client.upload_file(location, "odsc-workshop", location)
+            s3.meta.client.upload_file(location, "odsc-workshop", location, ExtraArgs={'ACL':'public-read'})
+
+    np.savetxt("cm.csv", cm, fmt='%d', delimiter=',')
+    cm_path = os.path.join(final_dir, "cm.csv")
+    s3.meta.client.upload_file("cm.csv", "odsc-workshop", cm_path, ExtraArgs={'ACL':'public-read'})
 
     # Perform metrics calculations
     if args.dev: 
-        confusion_matrix_file = './confusion_matrix.csv'
         accuracy_file = "./accuracy.txt"
         metrics_file = "./mlpipeline-metrics.json"
         metadata_file = "./mlpipeline-ui-metadata.json"
         model_path = "./model_path.txt"
         classes_path = "./classes.txt"
     else: 
-        confusion_matrix_file = "/confusion_matrix.csv"
         accuracy_file = "/accuracy.txt"
         metrics_file = "/mlpipeline-metrics.json"
         metadata_file = "/mlpipeline-ui-metadata.json"
@@ -124,7 +152,7 @@ if __name__ == "__main__":
         'outputs': [
             {
                 'type': 'tensorboard',
-                'source': os.path.join(os.getcwd(), models_path),
+                'source': os.path.join("s3://odsc-workshop", final_dir),
             },
             {
                 'type': 'confusion_matrix',
@@ -141,7 +169,7 @@ if __name__ == "__main__":
                     {'name': 'nine', 'type': 'CATEGORY'},
                     {'name': 'ten', 'type': 'CATEGORY'},
                 ],
-                'source': confusion_matrix_file,
+                'source': os.path.join("s3://odsc-workshop", cm_path),
                 'labels': [
                     'one', 'two', 'three', 'four', 'five', 
                     'six', 'seven', 'eight', 'nine', 'ten'
@@ -149,9 +177,6 @@ if __name__ == "__main__":
             }
         ]
     }
-
-    # Dump metrics
-    np.savetxt(confusion_matrix_file, cm, fmt='%d', delimiter=',')    
 
     with open(accuracy_file, "w+") as file:
         file.write(str(accuracy))

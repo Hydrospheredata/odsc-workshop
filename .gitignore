@@ -10,4 +10,5 @@ __pycache__/
 *.tar.gz
 *.db
 *.yaml*
+compiled.zip
 .venv
