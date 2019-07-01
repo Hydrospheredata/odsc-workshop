@@ -3,19 +3,19 @@ while [[ $# -gt 0 ]]; do
   key="$1"
 
   case $key in
-    -d|--docker) 
+    --docker) 
     BUILD_DOCKER=true;
     shift # past argument
     ;;
-    -a|--aws)
+    --aws)
     BUILD_AWS=true;
     shift # past argument
     ;;
-    -b|--build-base)
+    --build-base)
     BUILD_BASE=true;
     shift # past argument
     ;;
-    -w|--build-workers)
+    --build-workers)
     BUILD_WORKERS=true;
     shift # past argument
     ;;
@@ -23,23 +23,23 @@ while [[ $# -gt 0 ]]; do
     cache="--no-cache";
     shift # past argument
     ;;
-    -oc|--origin-compile)
+    --compile-origin)
     COMPILE_ORIGIN_PIPELINE=true;
     shift # past argument
     ;;
-    -or|--origin-run)
+    --run-origin)
     RUN_ORIGIN_PIPELINE=true;
     shift # past argument
     ;;
-    -sc|--sampling-compile)
-    COMPILE_SAMPLING_PIPELINE=true;
+    --compile-subsample)
+    COMPILE_SUBSAMPLE_PIPELINE=true;
     shift # past argument
     ;;
-    -sr|--sampling-run)
-    RUN_SAMPLING_PIPELINE=true;
+    --run-subsample)
+    RUN_SUBSAMPLE_PIPELINE=true;
     shift # past argument
     ;;
-    -n|--namespace)
+    --namespace)
     NAMESPACE=$2
     shift # past argument
     shift # past value
@@ -63,59 +63,52 @@ fi
 # Build base if specified
 if [[ $BUILD_BASE && $BUILD_DOCKER ]]; then
   echo "Building base image for Docker"
-  docker build -t $DOCKER_ACCOUNT/odsc-workshop-base:$TAG -f baseDockerfile $cache .
+  docker build -t $DOCKER_ACCOUNT/odsc-workshop-base:$TAG -f Dockerfile $cache .
   docker push $DOCKER_ACCOUNT/odsc-workshop-base:$TAG
 fi 
 
 # Build workers if specified
 if [[ $BUILD_WORKERS && $BUILD_DOCKER ]]; then
   echo "Building stage images for Docker"
-  for path in 01_download 01_sample 02_train-model 02_train-autoencoder 03_release-model 03_release-autoencoder 04_deploy 05_test; do 
+  for path in steps/*/; do 
     IFS=$'_'; arr=($path); unset IFS;
-    TAG=$TAG envsubst '$TAG' < "$path/Dockerfile" > "$path/SubsDockerfile"
+    TAG=$TAG envsubst '$TAG' < "$path/Dockerfile" > "$path/envsubDockerfile"
     docker build -t $DOCKER_ACCOUNT/mnist-pipeline-${arr[1]}:$TAG \
-      -f "$path/SubsDockerfile" $cache $path
+      -f "$path/envsubDockerfile" $cache $path
     docker push $DOCKER_ACCOUNT/mnist-pipeline-${arr[1]}:$TAG
-    rm "$path/SubsDockerfile"
+    rm "$path/envsubDockerfile"
   done
 fi 
 
 # Package files for AWS Lambda
 if [[ $BUILD_WORKERS && $BUILD_AWS ]]; then
-  echo "Zipping stage steps for AWS Lambda"
-  for path in 01_download 01_sample 02_train-model 02_train-autoencoder 03_release-model 03_release-autoencoder 04_deploy 05_test; do 
-    cd $path
-    unzip ./aws.zip -d ./aws
-    cp *.py ./aws
-    cd ./aws
-    zip -r ../compiled.zip .
-    cd ../
-    rm -rf ./aws
-    cd ../
-    exit 0
+  echo "Copying functions for packaging"
+  for path in steps/*/; do 
+    echo $path
+    cp $path/*.py serverless
   done
 fi 
 
-# Compile and run origin if needed
+# Compile origin and subsample piplines
 if [[ $COMPILE_ORIGIN_PIPELINE ]]; then
   echo "Compiling origin pipeline"
   python3 workflows/origin.py -n $NAMESPACE
   rm pipeline.tar.gz pipeline.yaml\'\'
 fi
 
+if [[ $COMPILE_SUBSAMPLE_PIPELINE ]]; then
+  echo "Compiling subsample pipeline"
+  python3 workflows/subsample.py -n $NAMESPACE
+  rm pipeline.tar.gz pipeline.yaml\'\'
+fi
+
+# Run origin and subsample pipelines
 if [[ $RUN_ORIGIN_PIPELINE ]]; then
   echo "Running origin pipeline"
   python3 kubeflow_client.py -n $NAMESPACE -f pipeline.yaml
 fi
 
-# Compile and run sampling if needed
-if [[ $COMPILE_SAMPLING_PIPELINE ]]; then
-  echo "Compiling sampling pipeline"
-  python3 workflows/sampling.py -n $NAMESPACE
-  rm pipeline.tar.gz pipeline.yaml\'\'
-fi
-
-if [[ $RUN_SAMPLING_PIPELINE ]]; then
-  echo "Running sampling pipeline"
+if [[ $RUN_SUBSAMPLE_PIPELINE ]]; then
+  echo "Running subsample pipeline"
   python3 kubeflow_client.py -n $NAMESPACE -f pipeline.yaml
 fi
