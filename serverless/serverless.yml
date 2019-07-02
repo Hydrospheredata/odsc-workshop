@@ -56,6 +56,17 @@ package:
 functions:
   download:
     handler: download.aws_lambda
+  subsample:
+    handler: subsample.aws_lambda
+  release_autoencoder:
+    handler: release_autoencoder.aws_lambda
+  release_model: 
+    handler: release_model.aws_lambda
+  test:
+    handler: test.aws_lambda
+  deploy:
+    handler: deploy.aws_lambda
+
 
 #    The following are a few example events you can configure
 #    NOTE: Please make sure to change your handler code to work with those events

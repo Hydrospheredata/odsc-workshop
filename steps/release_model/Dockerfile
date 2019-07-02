@@ -1,6 +1,6 @@
 FROM hydrosphere/odsc-workshop-base:$TAG
 
-ADD ./release.py /src/
+ADD ./release_model.py /src/
 
 WORKDIR /src/
-ENTRYPOINT [ "python", "release.py" ]
+ENTRYPOINT [ "python", "release_model.py" ]

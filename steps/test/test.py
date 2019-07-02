@@ -3,18 +3,13 @@ import numpy as np
 import argparse, boto3
 
 
-if __name__ == "__main__": 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--data-path', required=True)
-    parser.add_argument('--hydrosphere-address', required=True)
-    parser.add_argument('--acceptable-accuracy', type=float, required=True)
-    parser.add_argument('--application-name', required=True)
-    
-    args = parser.parse_args()
-    s3 = boto3.resource('s3')
+s3 = boto3.resource('s3')
+
+
+def main(data_path, hydrosphere_address, acceptable_accuracy, application_name):
 
     # Download testing data
-    s3.Object('odsc-workshop', os.path.join(args.data_path, "test.npz")).download_file('./test.npz')
+    s3.Object('odsc-workshop', os.path.join(data_path, "test.npz")).download_file('./test.npz')
     
     # Prepare data inputs
     with np.load("./test.npz") as data:
@@ -22,7 +17,7 @@ if __name__ == "__main__":
         labels = data["labels"].astype(int)[:100]
     
     requests_delay = 0.2
-    service_link = f"{args.hydrosphere_address}/gateway/application/{args.application_name}"
+    service_link = f"{hydrosphere_address}/gateway/application/{application_name}"
 
     print(f"Using URL :: {service_link}", flush=True)
 
@@ -40,5 +35,32 @@ if __name__ == "__main__":
     accuracy = np.sum(labels == np.array(predicted)) / len(labels)
     print(f"Achieved accuracy of {accuracy}", flush=True)
 
-    assert accuracy > args.acceptable_accuracy, \
-        f"Accuracy is not acceptable ({accuracy} < {args.acceptable_accuracy})"
+    assert accuracy > acceptable_accuracy, \
+        f"Accuracy is not acceptable ({accuracy} < {acceptable_accuracy})"
+    
+
+def aws_lambda(event, context):
+    return main(
+        data_path=event["data_path"],
+        hydrosphere_address=event["hydrosphere_address"],
+        acceptable_accuracy=event["acceptable_accuracy"],
+        application_name=event["application_name"],
+    )
+
+
+if __name__ == "__main__": 
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--data-path', required=True)
+    parser.add_argument('--hydrosphere-address', required=True)
+    parser.add_argument('--acceptable-accuracy', type=float, required=True)
+    parser.add_argument('--application-name', required=True)
+    
+    args = parser.parse_args()
+    main(
+        data_path=args.data_path,
+        hydrosphere_address=args.hydrosphere_address,
+        acceptable_accuracy=args.acceptable_accuracy,
+        application_name=args.application_name
+    )
+
+    

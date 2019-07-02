@@ -39,6 +39,10 @@ while [[ $# -gt 0 ]]; do
     RUN_SUBSAMPLE_PIPELINE=true;
     shift # past argument
     ;;
+    --deploy)
+    DEPLOY=true;
+    shift # past argument
+    ;;
     --namespace)
     NAMESPACE=$2
     shift # past argument
@@ -87,6 +91,12 @@ if [[ $BUILD_WORKERS && $BUILD_AWS ]]; then
     echo $path
     cp $path/*.py serverless
   done
+  if [[ $DEPLOY ]]; then
+    echo "Deploying service to AWS"
+    cd serverless
+    serverless deploy
+    rm *.py
+  fi
 fi 
 
 # Compile origin and subsample piplines

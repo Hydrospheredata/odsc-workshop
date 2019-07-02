@@ -118,4 +118,7 @@ if __name__ == "__main__":
         '--dev', help='Flag for development mode', action="store_true")
 
     args = parser.parse_args()
-    main(hydrosphere_address=args.hydrosphere_address, is_dev=args.dev)
+    main(
+        hydrosphere_address=args.hydrosphere_address, 
+        is_dev=args.dev
+    )
