@@ -9,11 +9,11 @@ s3 = boto3.resource('s3')
 def main(
     data_path, models_path, hydrosphere_address, autoencoder_app, 
     model_name, accuracy, loss, learning_rate, epochs, steps, classes, 
-    batch_size, is_dev=False, is_aws=False
+    batch_size, is_dev=False, is_aws=False, storage_path="./"
 ):
     
     # Download model 
-    os.makedirs("model", exist_ok=True)
+    os.makedirs(os.path.join(storage_path, "model"), exist_ok=True)
     for file in s3.Bucket('odsc-workshop').objects.filter(Prefix=models_path):
         relevant_folder = file.key.split("/")[4:]
 
@@ -21,12 +21,13 @@ def main(
         if len(relevant_folder) > 1:
             os.makedirs(os.path.join('model', *relevant_folder[:-1]), exist_ok=True)
         
-        s3.Object(file.bucket_name, file.key).download_file(os.path.join('model', *relevant_folder))
+        s3.Object(file.bucket_name, file.key) \
+            .download_file(os.path.join(storage_path, 'model', *relevant_folder))
 
     # Build servable
     payload = [
-        os.path.join('model', 'saved_model.pb'),
-        os.path.join('model', 'variables')
+        os.path.join(storage_path, 'model', 'saved_model.pb'),
+        os.path.join(storage_path, 'model', 'variables')
     ]
 
     metadata = {
@@ -111,6 +112,7 @@ def aws_lambda(event, context):
         classes=event["classes"],
         batch_size=event["batch_size"],
         is_aws=True,
+        storage_path="/tmp/"
     )
 
 

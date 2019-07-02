@@ -5,7 +5,7 @@ from hydrosdk import sdk
 
 def main(
     model_version, model_name, application_name_postfix, 
-    hydrosphere_address, is_dev=False, is_aws=False
+    hydrosphere_address, is_dev=False, is_aws=False, storage_path="./"
 ):
     
     application_name = f"{model_name}{application_name_postfix}"
@@ -35,7 +35,8 @@ def aws_lambda(event, context):
         model_name=event["model_name"],
         application_name_postfix=event["application_name_postfix"],
         hydrosphere_address=event["hydrosphere_address"],
-        is_aws=True,        
+        is_aws=True,
+        storage_path="/tmp/"
     )
 
 

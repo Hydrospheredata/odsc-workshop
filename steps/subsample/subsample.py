@@ -15,7 +15,7 @@ def get_model_version_id(host_address, application_name):
     return resp["executionGraph"]["stages"][0]["modelVariants"][0]["modelVersion"]["id"]
 
 
-def main(hydrosphere_address, application_name, is_dev=False, is_aws=False):
+def main(hydrosphere_address, application_name, is_dev=False, is_aws=False, storage_path="./"):
 
     # Define required variables
     namespace = urllib.parse.urlparse(hydrosphere_address).netloc.split(".")[0]
@@ -74,11 +74,12 @@ def main(hydrosphere_address, application_name, is_dev=False, is_aws=False):
     print(f"Train subsample size: {len(train_imgs)}", flush=True)
     print(f"Test subsample size: {len(test_imgs)}", flush=True)
     
-    np.savez_compressed("train", imgs=train_imgs, labels=train_labels)
-    np.savez_compressed("test", imgs=test_imgs, labels=test_labels)
+    np.savez_compressed(os.path.join(storage_path, "train.npz"), imgs=train_imgs, labels=train_labels)
+    np.savez_compressed(os.path.join(storage_path, "test.npz"), imgs=test_imgs, labels=test_labels)
 
     # Upload files to S3 
     for filename in ["train.npz", "test.npz"]:
+        filename = os.path.join(storage_path, filename)
         print(f"Uploading {filename} to S3", flush=True)
         s3.meta.client.upload_file(
             filename, "odsc-workshop", os.path.join(data_path, filename))
@@ -97,6 +98,7 @@ def aws_lambda(event, context):
         hydrosphere_address=event["hydrosphere_address"],
         application_name=event["application_name"],
         is_aws=True,
+        storage_path="/tmp/"
     )
 
 

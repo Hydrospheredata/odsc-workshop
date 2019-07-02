@@ -6,10 +6,14 @@ import argparse, boto3
 s3 = boto3.resource('s3')
 
 
-def main(data_path, hydrosphere_address, acceptable_accuracy, application_name):
+def main(
+    data_path, hydrosphere_address, acceptable_accuracy, 
+    application_name, storage_path="./"
+):
 
     # Download testing data
-    s3.Object('odsc-workshop', os.path.join(data_path, "test.npz")).download_file('./test.npz')
+    s3.Object('odsc-workshop', os.path.join(data_path, "test.npz")) \
+        .download_file(os.path.join(storage_path, 'test.npz'))
     
     # Prepare data inputs
     with np.load("./test.npz") as data:
@@ -45,6 +49,7 @@ def aws_lambda(event, context):
         hydrosphere_address=event["hydrosphere_address"],
         acceptable_accuracy=event["acceptable_accuracy"],
         application_name=event["application_name"],
+        storage_path="/tmp/"
     )
 
 
