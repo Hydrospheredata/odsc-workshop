@@ -22,9 +22,11 @@ service: workshop # NOTE: update this with your service name
 provider:
   name: aws
   runtime: python3.7
+  region: eu-central-1
 
 plugins:
   - serverless-python-requirements
+
 iamRoleStatements:
   - Effect: "Allow"
     Action:
@@ -42,14 +44,10 @@ iamRoleStatements:
 #  environment:
 #    variable1: value1
 
-# you can add packaging information here
-package:
- include:
-   - ../01-download/download.py
-
 functions:
   download:
     handler: download.aws_lambda
+    timeout: 45
   subsample:
     handler: subsample.aws_lambda
   release_autoencoder:
