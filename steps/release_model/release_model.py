@@ -98,6 +98,7 @@ def main(
 
 
 def aws_lambda(event, context):
+    print(event)
     return main(
         data_path=event["data_path"],
         models_path=event["models_path"],
