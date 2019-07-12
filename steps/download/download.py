@@ -1,8 +1,11 @@
 from PIL import Image
-import struct, numpy, boto3
+import struct, numpy
 import os, gzip, tarfile, shutil, glob
 import urllib, urllib.parse, urllib.request
 import datetime, argparse
+
+from storage import * 
+from orchestrator import *
 
 
 filenames = [
@@ -59,66 +62,65 @@ def process_images(dataset, storage_path):
 
 
 def download_mnist(base_url, storage_path):
+    """ Download and preprocess train/test datasets """
 
-    # Download files
     download_files(base_url, storage_path)
-
-    # Transform images into numpy arrays
     train_imgs, train_labels = process_images("train", storage_path)
     test_imgs, test_labels = process_images("t10k", storage_path) 
 
-    # Save numpy arrays
-
     train_path = os.path.join(storage_path, "train.npz")
     test_path = os.path.join(storage_path, "test.npz")
+
     numpy.savez_compressed(train_path, imgs=train_imgs, labels=train_labels)
     numpy.savez_compressed(test_path, imgs=test_imgs, labels=test_labels)
-
     return [train_path, test_path]
 
 
-def main(hydrosphere_address, storage_path="./", is_dev=False, is_aws=False):
-    s3 = boto3.resource('s3')
+def main(cloud, orchestrator_type, hydrosphere_address, storage_path="/"):
+    
+    # Define helper classes
+    storage = Storage(cloud, bucket_name="workshop-hydrosphere")
+    orchestrator = Orchestrator(orchestrator_type, storage_path=storage_path)
 
-    # Define the path, where to store files
+    # Define path, where to store files
     namespace = urllib.parse.urlparse(hydrosphere_address).netloc.split(".")[0]
     data_path = os.path.join(namespace, "data", "mnist", 
         str(round(datetime.datetime.now().timestamp())))
-
+    
     # Download and process MNIST files
     processed_files = download_mnist("http://yann.lecun.com/exdb/mnist/", storage_path)
 
-    # Upload files to S3 
+    # Upload files to the cloud
     for filename in processed_files:
-        print(f"Uploading {filename} to S3", flush=True)
-        s3.meta.client.upload_file(
-            Filename=os.path.join(storage_path, filename), 
-            Bucket="odsc-workshop", 
-            Key=os.path.join(data_path, os.path.basename(filename)))
-    
-    # Dump Dataset path:
-    # AWS
-    if is_aws: return {"data_path": data_path}
+        source_path = os.path.join(storage_path, filename)
+        destination_path = os.path.join(data_path, os.path.basename(filename))
+        storage.upload(source_path, destination_path)
 
-    # Kubeflow 
-    with open("./data_path.txt" if is_dev else "/data_path.txt", "w+") as file:
-        file.write(data_path)
+    # Export parameters for orchestrator
+    orchestrator.export_meta(
+        "data_path", os.path.join(storage.full_name, data_path), "txt")
 
 
 def aws_lambda(event, context):
     return main(
+        cloud="aws",
+        orchestrator_type="step_functions",
         hydrosphere_address=event["hydrosphere_address"], 
-        storage_path="/tmp", is_aws=True)
+        storage_path="/tmp",
+    )
 
 
 if __name__ == "__main__": 
     parser = argparse.ArgumentParser()
     parser.add_argument('--hydrosphere-address', required=True)
-    parser.add_argument(
-        '--dev', help='Flag for development mode', action="store_true")
+    parser.add_argument('--cloud', required=True)
+    parser.add_argument('--orchestrator', required=True)
+    parser.add_argument('--storage-path', default='/')
 
     args = parser.parse_args()
     main(
+        cloud=args.cloud,
+        orchestrator_type=args.orchestrator,
         hydrosphere_address=args.hydrosphere_address, 
-        is_dev=args.dev
+        storage_path=args.storage_path
     )

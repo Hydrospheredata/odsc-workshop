@@ -11,6 +11,10 @@ while [[ $# -gt 0 ]]; do
     BUILD_AWS=true;
     shift # past argument
     ;;
+    --gcp)
+    BUILD_GCP=true;
+    shift # past argument
+    ;;
     --build-base)
     BUILD_BASE=true;
     shift # past argument
@@ -74,13 +78,16 @@ fi
 # Build workers if specified
 if [[ $BUILD_WORKERS && $BUILD_DOCKER ]]; then
   echo "Building stage images for Docker"
-  for path in steps/*/; do 
-    IFS=$'_'; arr=($path); unset IFS;
+  for path in steps/*; do 
+    cp utilities/orchestrator.py $path
+    cp utilities/storage.py $path
     TAG=$TAG envsubst '$TAG' < "$path/Dockerfile" > "$path/envsubDockerfile"
-    docker build -t $DOCKER_ACCOUNT/mnist-pipeline-${arr[1]}:$TAG \
+    docker build -t $DOCKER_ACCOUNT/mnist-pipeline-$(basename $path):$TAG \
       -f "$path/envsubDockerfile" $cache $path
-    docker push $DOCKER_ACCOUNT/mnist-pipeline-${arr[1]}:$TAG
+    docker push $DOCKER_ACCOUNT/mnist-pipeline-$(basename $path):$TAG
     rm "$path/envsubDockerfile"
+    rm "$path/storage.py"
+    rm "$path/orchestrator.py"
   done
 fi 
 
@@ -102,14 +109,36 @@ fi
 # Compile origin and subsample piplines
 if [[ $COMPILE_ORIGIN_PIPELINE ]]; then
   echo "Compiling origin pipeline"
-  python3 workflows/origin.py -n $NAMESPACE
-  rm pipeline.tar.gz pipeline.yaml\'\'
+  if [ ! -z "$NAMESPACE" ]; then
+    if [ ! -z "$BUILD_AWS" ]; then
+      python3 workflows/origin.py --aws -n $NAMESPACE
+    elif [ ! -z "$BUILD_GCP" ]; then
+      python3 workflows/origin.py --gcp -n $NAMESPACE
+    else 
+      echo "Either --aws or --gcp flags should be passed"
+      exit 1
+    fi
+  else
+    if [ ! -z "$BUILD_AWS" ]; then
+      python3 workflows/origin.py --aws
+    elif [ ! -z "$BUILD_GCP" ]; then
+      python3 workflows/origin.py --gcp
+    else 
+      echo "Either --aws or --gcp flags should be passed"
+      exit 1
+    fi
+  fi
+  rm pipeline.tar.gz
 fi
 
 if [[ $COMPILE_SUBSAMPLE_PIPELINE ]]; then
   echo "Compiling subsample pipeline"
-  python3 workflows/subsample.py -n $NAMESPACE
-  rm pipeline.tar.gz pipeline.yaml\'\'
+  if [ -z "$NAMESPACE" ]; then
+    python3 workflows/subsample.py
+  else
+    python3 workflows/subsample.py -n $NAMESPACE
+  fi
+  rm pipeline.tar.gz
 fi
 
 # Run origin and subsample pipelines

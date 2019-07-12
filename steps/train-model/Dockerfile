@@ -3,4 +3,4 @@ FROM hydrosphere/odsc-workshop-base:$TAG
 COPY *.py /src/
 WORKDIR /src/
 
-ENTRYPOINT [ "python", "download.py" ]
+ENTRYPOINT [ "python", "train_model.py" ]
