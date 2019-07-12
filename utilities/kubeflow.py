@@ -12,12 +12,14 @@ parser.add_argument(
 parser.add_argument(
     '-r', '--run-name', help="Run name", default=None)
 parser.add_argument(
-    '-n', '--namespace', help="Namespace, where kubeflow and serving are running", required=True)
+    '-k', '--kubeflow', help="Host, where Kubeflow instance is running", required=True)
+parser.add_argument(
+    '-s', '--serving', help="Host, where Serving instance is running", required=True)
 args = parser.parse_args()
 
 
 # Create client
-client = kfp.Client(f"http://{args.namespace}.kubeflow.odsc.k8s.hydrosphere.io")
+client = kfp.Client(args.kubeflow)
 run_name = namesgenerator.get_random_name() if not args.run_name else args.run_name
 
 try:
@@ -30,6 +32,6 @@ except:
 result = client.run_pipeline(
     experiment_id, run_name, args.file,
     {
-        "hydrosphere-address": f"http://{args.namespace}.serving.odsc.k8s.hydrosphere.io",
+        "hydrosphere-address": args.serving,
     }
 )
