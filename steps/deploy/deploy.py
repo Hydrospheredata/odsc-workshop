@@ -2,31 +2,28 @@ import argparse
 import os, urllib.parse
 from hydrosdk import sdk
 
+from orchestrator import *
+
 
 def main(
     model_version, model_name, application_name_postfix, 
-    hydrosphere_address, is_dev=False, is_aws=False, storage_path="./"
+    hydrosphere_address, cloud, orchestrator_type, storage_path="/"
 ):
     
+    # Define helper class
+    orchestrator = Orchestrator(orchestrator_type, storage_path=storage_path)
+
+    # Create and deploy endpoint application
     application_name = f"{model_name}{application_name_postfix}"
     model = sdk.Model.from_existing(model_name, model_version)
+    
     application = sdk.Application.singular(application_name, model)
     result = application.apply(hydrosphere_address)
-    print(result, flush=True)
+    print(result)
 
-    # Dump application metadata:
-    # AWS
-    if is_aws: return {
-        "application_name": application_name,
-        "application_link": urllib.parse.urljoin(hydrosphere_address, f"applications/{application_name}")
-    }
-
-    # Kubeflow 
-    with open("./application_name.txt" if is_dev else "/application_name.txt", "w+") as file:
-        file.write(application_name)
-
-    with open("./application_link.txt" if is_dev else "/application_link.txt", "w+") as file:
-        file.write(urllib.parse.urljoin(hydrosphere_address, f"applications/{application_name}"))
+    # Export meta to the orchestrator
+    orchestrator.export_meta("application_name", application_name, "txt")
+    orchestrator.export_meta("application_link", urllib.parse.urljoin(hydrosphere_address, f"applications/{application_name}"), "txt")
 
 
 def aws_lambda(event, context):
@@ -35,7 +32,8 @@ def aws_lambda(event, context):
         model_name=event["model_name"],
         application_name_postfix=event["application_name_postfix"],
         hydrosphere_address=event["hydrosphere_address"],
-        is_aws=True,
+        orchestrator_type="step_functions",
+        cloud="aws",
         storage_path="/tmp/"
     )
 
@@ -46,7 +44,8 @@ if __name__ == '__main__':
     parser.add_argument('--model-name', required=True)
     parser.add_argument('--application-name-postfix', required=True)
     parser.add_argument('--hydrosphere-address', required=True)
-    parser.add_argument('--dev', help='Flag for development purposes', action="store_true")
+    parser.add_argument('--cloud', required=True)
+    parser.add_argument('--orchestrator', required=True)
     
     args = parser.parse_args()
     main(
@@ -54,5 +53,6 @@ if __name__ == '__main__':
         model_name=args.model_name,
         application_name_postfix=args.application_name_postfix, 
         hydrosphere_address=args.hydrosphere_address,
-        is_dev=args.dev,
+        cloud=args.cloud,
+        orchestrator_type=args.orchestrator,
     )

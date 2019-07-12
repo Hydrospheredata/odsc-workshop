@@ -1,6 +1,6 @@
 FROM hydrosphere/odsc-workshop-base:$TAG
 
-ADD ./deploy.py /src/
-
+COPY *.py /src/
 WORKDIR /src/
+
 ENTRYPOINT [ "python", "deploy.py" ]

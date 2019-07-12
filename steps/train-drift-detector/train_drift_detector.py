@@ -21,12 +21,12 @@ def decoder(x, weights, biases):
 
 
 def main(
-    cloud, orchestrator_type, data_path, hydrosphere_address, 
-    learning_rate, steps, batch_size, experiment, model_name, 
+    cloud, orchestrator_type, data_path, hydrosphere_address, learning_rate, 
+    steps, batch_size, experiment, model_name, bucket_name
 ): 
 
     # Define helper classes
-    storage = Storage(cloud, bucket_name="workshop-hydrosphere")
+    storage = Storage(cloud, bucket_name=bucket_name)
     orchestrator = Orchestrator(orchestrator_type, storage_path="/")
 
     # Set up environment and variables
@@ -62,8 +62,8 @@ def main(
     }
     
     # Download training/testing data
-    storage.download(os.path.join(data_path, "train.npz"), "./train.npz")
-    storage.download(os.path.join(data_path, "test.npz"), "./test.npz")
+    storage.download_file(os.path.join(data_path, "train.npz"), "./train.npz")
+    storage.download_file(os.path.join(data_path, "test.npz"), "./test.npz")
 
     # Prepare data inputs
     with np.load("./train.npz") as data:
@@ -136,7 +136,7 @@ def main(
     for root, dirs, files in os.walk(model_path):
         for file in files:
             source_path = os.path.join(root, file)
-            storage.upload(source_path, source_path)
+            storage.upload_file(source_path, source_path)
 
     # Export metadata to the orchestrator
     metrics = {
@@ -174,6 +174,7 @@ if __name__ == "__main__":
     parser.add_argument('--orchestrator', default=None)
     parser.add_argument('--experiment', required=True)
     parser.add_argument('--model-name', required=True)
+    parser.add_argument('--bucket-name', required=True)
     
     args = parser.parse_args()
     main(
@@ -186,4 +187,5 @@ if __name__ == "__main__":
         orchestrator_type=args.orchestrator,
         experiment=args.experiment,
         model_name=args.model_name,
+        bucket_name=args.bucket_name,
     )

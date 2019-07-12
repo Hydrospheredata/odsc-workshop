@@ -13,6 +13,7 @@ def parametrise_pipeline(cloud, secret_fn):
     def pipeline_definition(
         hydrosphere_address,
         experiment_name, 
+        bucket_name="workshop-hydrosphere",
         model_learning_rate="0.01",
         model_epochs="10",
         model_batch_size="256",
@@ -34,6 +35,7 @@ def parametrise_pipeline(cloud, secret_fn):
                 "--cloud", cloud,
                 "--hydrosphere-address", hydrosphere_address,
                 "--orchestrator", "kubeflow",
+                "--bucket-name", bucket_name,
             ]
         ).apply(secret_fn())
 
@@ -60,6 +62,7 @@ def parametrise_pipeline(cloud, secret_fn):
                 "--orchestrator", "kubeflow",
                 "--experiment", experiment_name,
                 "--model-name", model_name, 
+                "--bucket-name", bucket_name,
             ]
         ).apply(secret_fn())
         train_model.set_memory_request('1G')
@@ -85,127 +88,135 @@ def parametrise_pipeline(cloud, secret_fn):
                 "--orchestrator", "kubeflow",
                 "--experiment", experiment_name,
                 "--model-name", model_drift_detector_name,
+                "--bucket-name", bucket_name
             ]
         ).apply(secret_fn())
         train_drift_detector.set_memory_request('2G')
         train_drift_detector.set_cpu_request('1')
 
-        # # 4. Release Drift Detector to Hydrosphere.io platform 
-        # release_drift_detector = dsl.ContainerOp(
-        #     name="release_drift_detector",
-        #     image=f"hydrosphere/mnist-pipeline-release-drift-detector:{tag}", 
-        #     file_outputs={
-        #         "model_version": "/model_version.txt",
-        #         "model_link": "/model_link.txt"
-        #     },
-        #     arguments=[
-        #         "--data-path", download.outputs["data_path"],
-        #         "--model-name", model_drift_detector_name,
-        #         "--models-path", train_drift_detector.outputs["model_path"],
-        #         "--classes", train_drift_detector.outputs["classes"],
-        #         "--loss", train_drift_detector.outputs["loss"],
-        #         "--hydrosphere-address", hydrosphere_address,
-        #         "--learning-rate", drift_detector_learning_rate,
-        #         "--batch-size", drift_detector_batch_size,
-        #         "--steps", drift_detector_steps, 
-        #         "--cloud", cloud,
-        #         "--orchestrator", "kubeflow",
-        #     ]
-        # ).apply(secret_fn())
+        # 4. Release Drift Detector to Hydrosphere.io platform 
+        release_drift_detector = dsl.ContainerOp(
+            name="release_drift_detector",
+            image=f"hydrosphere/mnist-pipeline-release-drift-detector:{tag}", 
+            file_outputs={
+                "model_version": "/model_version.txt",
+                "model_link": "/model_link.txt"
+            },
+            arguments=[
+                "--data-path", download.outputs["data_path"],
+                "--model-path", train_drift_detector.outputs["model_path"],
+                "--hydrosphere-address", hydrosphere_address,
+                "--model-name", model_drift_detector_name,
+                "--learning-rate", drift_detector_learning_rate,
+                "--batch-size", drift_detector_batch_size,
+                "--steps", drift_detector_steps, 
+                "--loss", train_drift_detector.outputs["loss"],
+                "--classes", train_drift_detector.outputs["classes"],
+                "--cloud", cloud,
+                "--orchestrator", "kubeflow",
+                "--bucket-name", "workshop-hydrosphere",
+            ]
+        ).apply(secret_fn())
 
-        # # 5. Deploy Drift Detector model as endpoint application 
-        # deploy_drift_detector_to_prod = dsl.ContainerOp(
-        #     name="deploy_drift_detector_to_prod",
-        #     image=f"hydrosphere/mnist-pipeline-deploy:{tag}",  
-        #     file_outputs={
-        #         "application_name": "/application_name.txt",
-        #         "application_link": "/application_link.txt"
-        #     },
-        #     arguments=[
-        #         "--model-version", release_drift_detector.outputs["model_version"],
-        #         "--application-name-postfix", "_app", 
-        #         "--hydrosphere-address", hydrosphere_address,
-        #         "--model-name", model_drift_detector_name,
-        #         "--cloud", cloud,
-        #         "--orchestrator", "kubeflow",
-        #     ],
-        # ).apply(secret_fn())
+        # 5. Deploy Drift Detector model as endpoint application 
+        deploy_drift_detector_to_prod = dsl.ContainerOp(
+            name="deploy_drift_detector_to_prod",
+            image=f"hydrosphere/mnist-pipeline-deploy:{tag}",  
+            file_outputs={
+                "application_name": "/application_name.txt",
+                "application_link": "/application_link.txt"
+            },
+            arguments=[
+                "--model-version", release_drift_detector.outputs["model_version"],
+                "--application-name-postfix", "_app", 
+                "--hydrosphere-address", hydrosphere_address,
+                "--model-name", model_drift_detector_name,
+                "--cloud", cloud,
+                "--orchestrator", "kubeflow",
+            ],
+        ).apply(secret_fn())
 
-        # # 6. Release MNIST classifier with assigned metrics to Hydrosphere.io platform
-        # release_model = dsl.ContainerOp(
-        #     name="release_model",
-        #     image=f"hydrosphere/mnist-pipeline-release-model:{tag}", 
-        #     file_outputs={
-        #         "model_version": "/model_version.txt",
-        #         "model_link": "/model_link.txt"
-        #     },
-        #     arguments=[
-        #         "--data-path", download.outputs["data_path"],
-        #         "--model-name", model_name,
-        #         "--models-path", train_model.outputs["model_path"],
-        #         "--drift-detector-app", deploy_drift_detector_to_prod.outputs["application_name"],
-        #         "--classes", train_model.outputs["classes"],
-        #         "--accuracy", train_model.outputs["accuracy"],
-        #         "--hydrosphere-address", hydrosphere_address,
-        #         "--learning-rate", model_learning_rate,
-        #         "--epochs", model_epochs,
-        #         "--batch-size", model_batch_size,
-        #         "--cloud", cloud,
-        #         "--orchestrator", "kubeflow",
-        #     ]
-        # ).apply(secret_fn())
+        # 6. Release MNIST classifier with assigned metrics to Hydrosphere.io platform
+        release_model = dsl.ContainerOp(
+            name="release_model",
+            image=f"hydrosphere/mnist-pipeline-release-model:{tag}", 
+            file_outputs={
+                "model_version": "/model_version.txt",
+                "model_link": "/model_link.txt"
+            },
+            arguments=[
+                "--hydrosphere-address", hydrosphere_address,
+                "--drift-detector-app", deploy_drift_detector_to_prod.outputs["application_name"],
+                "--model-name", model_name,
+                "--classes", train_model.outputs["classes"],
+                "--cloud", cloud,
+                "--orchestrator", "kubeflow",
+                "--bucket-name", bucket_name, 
+                "--data-path", download.outputs["data_path"],
+                "--model-path", train_model.outputs["model_path"],
+                "--accuracy", train_model.outputs["accuracy"],
+                "--average-loss", train_model.outputs["average_loss"],
+                "--loss", train_model.outputs["loss"],
+                "--learning-rate", model_learning_rate,
+                "--batch-size", model_batch_size,
+                "--epochs", model_epochs,
+                "--global-step", train_model.outputs["global_step"],
+                "--mlflow-link", train_model.outputs["mlflow_link"],
+            ]
+        ).apply(secret_fn())
 
-        # # 7. Deploy MNIST classifier model as endpoint application on stage for testing purposes
-        # deploy_model_to_stage = dsl.ContainerOp(
-        #     name="deploy_model_to_stage",
-        #     image=f"hydrosphere/mnist-pipeline-deploy:{tag}",  
-        #     file_outputs={
-        #         "application_name": "/application_name.txt",
-        #         "application_link": "/application_link.txt"
-        #     },
-        #     arguments=[
-        #         "--model-version", release_model.outputs["model_version"],
-        #         "--application-name-postfix", "_stage_app", 
-        #         "--hydrosphere-address", hydrosphere_address,
-        #         "--model-name", model_name,
-        #         "--cloud", cloud,
-        #         "--orchestrator", "kubeflow",
-        #     ],
-        # ).apply(secret_fn())
+        # 7. Deploy MNIST classifier model as endpoint application on stage for testing purposes
+        deploy_model_to_stage = dsl.ContainerOp(
+            name="deploy_model_to_stage",
+            image=f"hydrosphere/mnist-pipeline-deploy:{tag}",  
+            file_outputs={
+                "application_name": "/application_name.txt",
+                "application_link": "/application_link.txt"
+            },
+            arguments=[
+                "--model-version", release_model.outputs["model_version"],
+                "--application-name-postfix", "_stage_app", 
+                "--hydrosphere-address", hydrosphere_address,
+                "--model-name", model_name,
+                "--cloud", cloud,
+                "--orchestrator", "kubeflow",
+            ],
+        ).apply(secret_fn())
 
-        # # 8. Perform integration testing on the deployed staged application
-        # test_model = dsl.ContainerOp(
-        #     name="test_model",
-        #     image=f"hydrosphere/mnist-pipeline-test:{tag}", 
-        #     arguments=[
-        #         "--data-path", download.outputs["data_path"],
-        #         "--hydrosphere-address", hydrosphere_address,
-        #         "--application-name", deploy_model_to_stage.outputs["application_name"], 
-        #         "--acceptable-accuracy", acceptable_accuracy,
-        #         "--cloud", cloud,
-        #         "--orchestrator", "kubeflow",
-        #     ],
-        # ).apply(secret_fn())
-        # test_model.set_retry(3)
+        # 8. Perform integration testing on the deployed staged application
+        test_model = dsl.ContainerOp(
+            name="test_model",
+            image=f"hydrosphere/mnist-pipeline-test:{tag}", 
+            arguments=[
+                "--data-path", download.outputs["data_path"],
+                "--hydrosphere-address", hydrosphere_address,
+                "--application-name", deploy_model_to_stage.outputs["application_name"], 
+                "--acceptable-accuracy", acceptable_accuracy,
+                "--cloud", cloud,
+                "--orchestrator", "kubeflow",
+                "--bucket-name", bucket_name,
+            ],
+        ).apply(secret_fn())
+        test_model.set_retry(3)
 
         # # 9. Deploy MNIST classifier model as endpoint application to production
-        # deploy_model_to_prod = dsl.ContainerOp(
-        #     name="deploy_model_to_prod",
-        #     image=f"hydrosphere/mnist-pipeline-deploy:{tag}",  
-        #     file_outputs={
-        #         "application_name": "/application_name.txt",
-        #         "application_link": "/application_link.txt"
-        #     },
-        #     arguments=[
-        #         "--model-version", release_model.outputs["model_version"],
-        #         "--application-name-postfix", "_app", 
-        #         "--hydrosphere-address", hydrosphere_address,
-        #         "--model-name", model_name,
-        #         "--cloud", cloud,
-        #         "--orchestrator", "kubeflow",
-        #     ],
-        # ).apply(secret_fn())
-        # deploy_model_to_prod.after(test_model)
+        deploy_model_to_prod = dsl.ContainerOp(
+            name="deploy_model_to_prod",
+            image=f"hydrosphere/mnist-pipeline-deploy:{tag}",  
+            file_outputs={
+                "application_name": "/application_name.txt",
+                "application_link": "/application_link.txt"
+            },
+            arguments=[
+                "--model-version", release_model.outputs["model_version"],
+                "--application-name-postfix", "_app", 
+                "--hydrosphere-address", hydrosphere_address,
+                "--model-name", model_name,
+                "--cloud", cloud,
+                "--orchestrator", "kubeflow",
+            ],
+        ).apply(secret_fn())
+        deploy_model_to_prod.after(test_model)
 
     return pipeline_definition
 

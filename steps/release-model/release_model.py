@@ -2,27 +2,21 @@ import argparse
 import os, boto3, urllib.parse
 from hydrosdk import sdk
 
-
-s3 = boto3.resource('s3')
+from storage import *
+from orchestrator import * 
 
 
 def main(
-    data_path, models_path, hydrosphere_address, autoencoder_app, 
-    model_name, accuracy, loss, learning_rate, epochs, steps, classes, 
-    batch_size, is_dev=False, is_aws=False, storage_path="./"
+    hydrosphere_address, drift_detector_app, model_name, classes, cloud, 
+    orchestrator_type, bucket_name, storage_path="/", **kwargs
 ):
     
-    # Download model 
-    os.makedirs(os.path.join(storage_path, "model"), exist_ok=True)
-    for file in s3.Bucket('odsc-workshop').objects.filter(Prefix=models_path):
-        relevant_folder = file.key.split("/")[4:]
+    storage = Storage(cloud, bucket_name)
+    orchestrator = Orchestrator(orchestrator_type, storage_path)
 
-        # Create nested folders if necessary
-        if len(relevant_folder) > 1:
-            os.makedirs(os.path.join('model', *relevant_folder[:-1]), exist_ok=True)
-        
-        s3.Object(file.bucket_name, file.key) \
-            .download_file(os.path.join(storage_path, 'model', *relevant_folder))
+    # Download model 
+    working_dir = os.path.join(storage_path, "model")
+    storage.download_prefix(os.path.join(kwargs["model_path"], "saved_model"), working_dir)
 
     # Build servable
     payload = [
@@ -31,20 +25,17 @@ def main(
     ]
 
     metadata = {
-        'learning_rate': learning_rate,
-        'batch_size': batch_size,
-        'data': data_path,
-        'model': models_path
+        'learning_rate': kwargs["learning_rate"],
+        'batch_size': kwargs["batch_size"],
+        'epochs': kwargs["epochs"], 
+        'accuracy': kwargs["accuracy"],
+        'average_loss': kwargs["average_loss"],
+        'loss': kwargs["loss"],
+        'global_step': kwargs["global_step"],
+        'mlflow_link': kwargs["mlflow_link"], 
+        'data': kwargs["data_path"],
+        'model_path': kwargs["model_path"],
     }
-
-    if args.epochs:
-        metadata["epochs"] = epochs
-    if args.accuracy:
-        metadata["accuracy"] = accuracy
-    if args.loss:
-        metadata["loss"] = loss
-    if args.steps:
-        metadata["steps"] = steps
 
     signature = sdk.Signature('predict')\
         .with_input('imgs', 'float32', [-1, 28, 28, 1], 'image')\
@@ -62,7 +53,7 @@ def main(
             .with_spec(
                 kind='ImageAEMetricSpec', 
                 threshold=0.15, 
-                application=autoencoder_app
+                application=drift_detector_app
             )
     ]
 
@@ -77,76 +68,73 @@ def main(
     result = model.apply(hydrosphere_address)
     print(result)
 
-    # Dump built model metadata:
-    # AWS
-    if is_aws: return {
-        "model_version": result["modelVersion"],
-        "model_link": urllib.parse.urljoin(
-            hydrosphere_address, f"/models/{result['model']['id']}/{result['id']}/details")
-    }
-
-    # Kubeflow 
-    with open("./model_version.txt" if is_dev else "/model_version.txt", 'w+') as file:
-        file.write(str(result['modelVersion']))
-    
-    with open("./model_link.txt" if is_dev else "/model_link.txt", "w+") as file:
-        model_id = str(result["model"]["id"])
-        version_id = str(result["id"])
-        link = urllib.parse.urljoin(hydrosphere_address, 
-            f"models/{model_id}/{version_id}/details")
-        file.write(link)
-
+    orchestrator.export_meta("model_version", result["modelVersion"], "txt")
+    orchestrator.export_meta("model_link", urllib.parse.urljoin(
+        hydrosphere_address, f"/models/{result['model']['id']}/{result['id']}/details"), "txt")
 
 def aws_lambda(event, context):
     print(event)
     return main(
-        data_path=event["data_path"],
-        models_path=event["models_path"],
         hydrosphere_address=event["hydrosphere_address"],
-        autoencoder_app=event["autoencoder_app"],
+        drift_detector_app=event["drift_detector_app"],
         model_name=event["model_name"],
-        accuracy=event.get("accuracy"),
-        loss=event.get("loss"),
-        learning_rate=event["learning_rate"],
-        epochs=event.get("epochs"),
-        steps=event.get("steps"),
         classes=event["classes"],
+        cloud="aws",
+        orchestrator_type="step_functions",
+        bucket_name=event["bucket_name"],
+        data_path=event["data_path"],
+        model_path=event["model_path"],
+        accuracy=event["accuracy"],
+        average_loss=event["average_loss"],
+        loss=event["loss"],
+        learning_rate=event["learning_rate"],
         batch_size=event["batch_size"],
-        is_aws=True,
-        storage_path="/tmp/"
+        epochs=event["epochs"],
+        global_step=event["global_step"],
+        mlflow_link=event["mlflow_link"],
+        storage_path="/tmp/",
     )
 
 
 if __name__ == "__main__": 
     parser = argparse.ArgumentParser()
     
-    parser.add_argument('--data-path', required=True)
-    parser.add_argument('--models-path', required=True)
     parser.add_argument('--hydrosphere-address', required=True)
-    parser.add_argument('--autoencoder-app', required=True)
+    parser.add_argument('--drift-detector-app', required=True)
     parser.add_argument('--model-name', required=True)
-    parser.add_argument('--accuracy')
-    parser.add_argument('--loss')
+    parser.add_argument('--classes', type=int, required=True)
+    parser.add_argument('--cloud', required=True)
+    parser.add_argument('--orchestrator', required=True)
+    parser.add_argument('--bucket-name', required=True)
+
+    parser.add_argument('--data-path', required=True)
+    parser.add_argument('--model-path', required=True)
+    parser.add_argument('--accuracy', required=True)
+    parser.add_argument('--average-loss', required=True)
+    parser.add_argument('--loss', required=True)
     parser.add_argument('--learning-rate', required=True)
-    parser.add_argument('--epochs'),
-    parser.add_argument('--steps'),
-    parser.add_argument('--classes', type=int, required=True),
     parser.add_argument('--batch-size', required=True)
-    parser.add_argument('--dev', help='Flag for development purposes', action="store_true")
+    parser.add_argument('--epochs', required=True)
+    parser.add_argument('--global-step', required=True)
+    parser.add_argument('--mlflow-link', required=True)
     
     args = parser.parse_args()
     main(
-        data_path=args.data_path,
-        models_path=args.models_path,
         hydrosphere_address=args.hydrosphere_address,
-        autoencoder_app=args.autoencoder_app,
+        drift_detector_app=args.drift_detector_app,
         model_name=args.model_name,
+        classes=args.classes,
+        cloud=args.cloud,
+        orchestrator_type=args.orchestrator,
+        bucket_name=args.bucket_name,
+        data_path=args.data_path,
+        model_path=args.model_path,
         accuracy=args.accuracy,
+        average_loss=args.average_loss,
         loss=args.loss,
         learning_rate=args.learning_rate,
-        epochs=args.epochs,
-        steps=args.steps,
-        classes=args.classes,
         batch_size=args.batch_size,
-        is_dev=args.dev,
+        epochs=args.epochs,
+        global_step=args.global_step,
+        mlflow_link=args.mlflow_link,
     )

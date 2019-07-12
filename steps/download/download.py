@@ -76,10 +76,10 @@ def download_mnist(base_url, storage_path):
     return [train_path, test_path]
 
 
-def main(cloud, orchestrator_type, hydrosphere_address, storage_path="/"):
+def main(cloud, orchestrator_type, hydrosphere_address, bucket_name, storage_path="/"):
     
     # Define helper classes
-    storage = Storage(cloud, bucket_name="workshop-hydrosphere")
+    storage = Storage(cloud, bucket_name=bucket_name)
     orchestrator = Orchestrator(orchestrator_type, storage_path=storage_path)
 
     # Define path, where to store files
@@ -94,7 +94,7 @@ def main(cloud, orchestrator_type, hydrosphere_address, storage_path="/"):
     for filename in processed_files:
         source_path = os.path.join(storage_path, filename)
         destination_path = os.path.join(data_path, os.path.basename(filename))
-        storage.upload(source_path, destination_path)
+        storage.upload_file(source_path, destination_path)
 
     # Export parameters for orchestrator
     orchestrator.export_meta(
@@ -107,6 +107,7 @@ def aws_lambda(event, context):
         orchestrator_type="step_functions",
         hydrosphere_address=event["hydrosphere_address"], 
         storage_path="/tmp",
+        bucket_name=event["bucket_name"],
     )
 
 
@@ -116,11 +117,13 @@ if __name__ == "__main__":
     parser.add_argument('--cloud', required=True)
     parser.add_argument('--orchestrator', required=True)
     parser.add_argument('--storage-path', default='/')
+    parser.add_argument('--bucket-name', required=True)
 
     args = parser.parse_args()
     main(
         cloud=args.cloud,
         orchestrator_type=args.orchestrator,
         hydrosphere_address=args.hydrosphere_address, 
-        storage_path=args.storage_path
+        storage_path=args.storage_path,
+        bucket_name=args.bucket_name,
     )

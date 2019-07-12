@@ -9,12 +9,12 @@ from orchestrator import *
 
 
 def main(
-    data_path, hydrosphere_address, learning_rate, epochs, 
-    batch_size, cloud, orchestrator_type, experiment, model_name, 
+    data_path, hydrosphere_address, learning_rate, epochs, batch_size, 
+    cloud, orchestrator_type, bucket_name, experiment, model_name, 
 ):
 
     # Define helper classes
-    storage = Storage(cloud, bucket_name="workshop-hydrosphere")
+    storage = Storage(cloud, bucket_name=bucket_name)
     orchestrator = Orchestrator(orchestrator_type, storage_path="/")
 
     # Set up environment and variables
@@ -33,8 +33,8 @@ def main(
     })
 
     # Download training/testing data
-    storage.download(os.path.join(data_path, 'test.npz'), './test.npz')
-    storage.download(os.path.join(data_path, 'train.npz'), './train.npz')
+    storage.download_file(os.path.join(data_path, 'test.npz'), './test.npz')
+    storage.download_file(os.path.join(data_path, 'train.npz'), './train.npz')
 
     # Prepare data inputs
     with np.load("./train.npz") as data:
@@ -83,11 +83,11 @@ def main(
     for root, dirs, files in os.walk(final_dir):
         for file in files:
             source_path = os.path.join(root, file)
-            storage.upload(source_path, source_path)
+            storage.upload_file(source_path, source_path)
 
     # Upload confusion_matrix to the cloud
     np.savetxt("cm.csv", cm, fmt='%d', delimiter=',')
-    cm_cloud_path = storage.upload("./cm.csv", os.path.join(final_dir, "cm.csv"))
+    cm_cloud_path = storage.upload_file("./cm.csv", os.path.join(final_dir, "cm.csv"))
 
     # Export metadata to the orchestrator
     metrics = {
@@ -192,6 +192,7 @@ if __name__ == "__main__":
     parser.add_argument('--orchestrator', default=None)
     parser.add_argument('--experiment', required=True)
     parser.add_argument('--model-name', required=True)
+    parser.add_argument('--bucket-name', required=True)
     
     args = parser.parse_args()
     main(
@@ -204,4 +205,5 @@ if __name__ == "__main__":
         orchestrator_type=args.orchestrator,
         experiment=args.experiment,
         model_name=args.model_name,
+        bucket_name=args.bucket_name,
     )
