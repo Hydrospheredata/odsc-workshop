@@ -2,20 +2,24 @@ import os, json, sys, shutil, tempfile
 import tensorflow as tf, numpy as np
 import urllib.parse, argparse, mlflow, mlflow.tensorflow
 from sklearn.metrics import confusion_matrix
-import namesgenerator
+from decouple import Config, RepositoryEnv
 
 from storage import *
 from orchestrator import *
 
 
+config = Config(RepositoryEnv("config.env"))
+MLFLOW_LINK = config("MLFLOW_LINK")
+
+
 def main(
-    data_path, hydrosphere_address, learning_rate, epochs, batch_size, 
-    cloud, orchestrator_type, bucket_name, experiment, model_name, 
+    data_path, hydrosphere_address, learning_rate, epochs, 
+    batch_size, bucket_name, experiment, model_name, storage_path="/"
 ):
 
     # Define helper classes
-    storage = Storage(cloud, bucket_name=bucket_name)
-    orchestrator = Orchestrator(orchestrator_type, storage_path="/")
+    storage = Storage(bucket_name)
+    orchestrator = Orchestrator(storage_path=storage_path)
 
     # Set up environment and variables
     tf.logging.set_verbosity(tf.logging.INFO)
@@ -23,7 +27,7 @@ def main(
     model_path = os.path.join(namespace, "model", "mnist")
 
     # Log params into Mlflow
-    mlflow.set_tracking_uri("http://mlflow-service:5000")
+    mlflow.set_tracking_uri(MLFLOW_LINK)
     mlflow.set_experiment(f'{experiment}.{model_name}') 
     mlflow.log_params({
         "data_path": data_path,
@@ -63,8 +67,8 @@ def main(
 
     # Export the model 
     serving_input_receiver_fn = tf.estimator \
-        .export.build_raw_serving_input_receiver_fn(
-            {"imgs": tf.placeholder(tf.float32, shape=(None, 28, 28, 1))})
+        .export.build_raw_serving_input_receiver_fn({
+            "imgs": tf.placeholder(tf.float32, shape=(None, 28, 28, 1))})
     saved_model_path = estimator.export_saved_model(
         model_path, serving_input_receiver_fn).decode()
 
@@ -127,7 +131,7 @@ def main(
     mlflow.log_param("model_path", os.path.join(storage.full_name, final_dir))
     
     run = mlflow.active_run()
-    mlflow_link = f"/#/experiments/{run.info.experiment_id}/runs/{run.info.run_id}"
+    mlflow_link = f"{MLFLOW_LINK}/#/experiments/{run.info.experiment_id}/runs/{run.info.run_id}"
 
     orchestrator.export_meta("mlpipeline-metrics", metrics, "json")
     orchestrator.export_meta("mlpipeline-ui-metadata", metadata, "json")
@@ -188,8 +192,6 @@ if __name__ == "__main__":
     parser.add_argument('--epochs', type=int, default=10)
     parser.add_argument('--steps', type=int, default=3500)
     parser.add_argument('--batch-size', type=int, default=256)
-    parser.add_argument('--cloud', required=True)
-    parser.add_argument('--orchestrator', default=None)
     parser.add_argument('--experiment', required=True)
     parser.add_argument('--model-name', required=True)
     parser.add_argument('--bucket-name', required=True)
@@ -201,8 +203,6 @@ if __name__ == "__main__":
         learning_rate=args.learning_rate,
         epochs=args.epochs,
         batch_size=args.batch_size,
-        cloud=args.cloud, 
-        orchestrator_type=args.orchestrator,
         experiment=args.experiment,
         model_name=args.model_name,
         bucket_name=args.bucket_name,

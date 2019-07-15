@@ -1,18 +1,23 @@
 import argparse
-import os, boto3, urllib.parse
+import os, urllib.parse
 from hydrosdk import sdk
+from decouple import Config, RepositoryEnv
 
 from storage import *
 from orchestrator import * 
 
 
+config = Config(RepositoryEnv("config.env"))
+TENSORFLOW_RUNTIME = config('TENSORFLOW_RUNTIME')
+
+
 def main(
-    hydrosphere_address, drift_detector_app, model_name, classes, cloud, 
-    orchestrator_type, bucket_name, storage_path="/", **kwargs
+    hydrosphere_address, drift_detector_app, model_name, classes, 
+    bucket_name, storage_path="/", **kwargs
 ):
     
-    storage = Storage(cloud, bucket_name)
-    orchestrator = Orchestrator(orchestrator_type, storage_path)
+    storage = Storage(bucket_name)
+    orchestrator = Orchestrator(storage_path=storage_path)
 
     # Download model 
     working_dir = os.path.join(storage_path, "model")
@@ -59,7 +64,7 @@ def main(
 
     model = sdk.Model() \
         .with_name(model_name) \
-        .with_runtime('hydrosphere/serving-runtime-tensorflow-1.13.1:dev') \
+        .with_runtime(TENSORFLOW_RUNTIME) \
         .with_metadata(metadata) \
         .with_payload(payload) \
         .with_signature(signature) \
@@ -73,14 +78,11 @@ def main(
         hydrosphere_address, f"/models/{result['model']['id']}/{result['id']}/details"), "txt")
 
 def aws_lambda(event, context):
-    print(event)
     return main(
         hydrosphere_address=event["hydrosphere_address"],
         drift_detector_app=event["drift_detector_app"],
         model_name=event["model_name"],
         classes=event["classes"],
-        cloud="aws",
-        orchestrator_type="step_functions",
         bucket_name=event["bucket_name"],
         data_path=event["data_path"],
         model_path=event["model_path"],
@@ -103,8 +105,6 @@ if __name__ == "__main__":
     parser.add_argument('--drift-detector-app', required=True)
     parser.add_argument('--model-name', required=True)
     parser.add_argument('--classes', type=int, required=True)
-    parser.add_argument('--cloud', required=True)
-    parser.add_argument('--orchestrator', required=True)
     parser.add_argument('--bucket-name', required=True)
 
     parser.add_argument('--data-path', required=True)
@@ -124,8 +124,6 @@ if __name__ == "__main__":
         drift_detector_app=args.drift_detector_app,
         model_name=args.model_name,
         classes=args.classes,
-        cloud=args.cloud,
-        orchestrator_type=args.orchestrator,
         bucket_name=args.bucket_name,
         data_path=args.data_path,
         model_path=args.model_path,

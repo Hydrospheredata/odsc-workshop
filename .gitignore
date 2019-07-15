@@ -14,3 +14,4 @@ __pycache__/
 compiled.zip
 package-lock.json
 .venv
+*.env

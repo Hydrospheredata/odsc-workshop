@@ -1,18 +1,23 @@
 import argparse
 import os, urllib.parse
 from hydrosdk import sdk
+from decouple import Config, RepositoryEnv
 
 from storage import *
 from orchestrator import * 
 
 
+config = Config(RepositoryEnv("config.env"))
+TENSORFLOW_RUNTIME = config('TENSORFLOW_RUNTIME')
+
+
 def main(
     data_path, model_path, hydrosphere_address, model_name, loss, learning_rate, 
-    steps, classes, batch_size, cloud, orchestrator_type, bucket_name, storage_path="/"
+    steps, classes, batch_size, bucket_name, storage_path="/"
 ):
 
-    storage = Storage(cloud, bucket_name)
-    orchestrator = Orchestrator(orchestrator_type, storage_path)
+    storage = Storage(bucket_name)
+    orchestrator = Orchestrator(storage_path=storage_path)
 
     # Download model 
     working_dir = os.path.join(storage_path, "model")
@@ -43,7 +48,7 @@ def main(
 
     model = sdk.Model() \
         .with_name(model_name) \
-        .with_runtime('hydrosphere/serving-runtime-tensorflow-1.13.1:dev') \
+        .with_runtime(TENSORFLOW_RUNTIME) \
         .with_metadata(metadata) \
         .with_payload(payload) \
         .with_signature(signature)
@@ -67,8 +72,6 @@ def aws_lambda(event, context):
         steps=event["steps"],
         classes=event["classes"],
         batch_size=event["batch_size"],
-        cloud="aws",
-        orchestrator_type="step_functions",
         storage_path="/tmp/",
         bucket_name=event["bucket_name"],
     )
@@ -86,8 +89,6 @@ if __name__ == "__main__":
     parser.add_argument('--steps', required=True),
     parser.add_argument('--loss', required=True)
     parser.add_argument('--classes', type=int, required=True),
-    parser.add_argument('--cloud', required=True)
-    parser.add_argument('--orchestrator', required=True)
     parser.add_argument('--bucket-name', required=True)
     
     args = parser.parse_args()
@@ -101,8 +102,6 @@ if __name__ == "__main__":
         steps=args.steps,
         classes=args.classes,
         batch_size=args.batch_size,
-        cloud=args.cloud,
-        orchestrator_type=args.orchestrator,
         bucket_name=args.bucket_name,
     )
 

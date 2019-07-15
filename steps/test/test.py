@@ -7,11 +7,11 @@ from storage import *
 
 def main(
     data_path, hydrosphere_address, acceptable_accuracy, 
-    application_name, cloud, bucket_name, storage_path="/"
+    application_name, bucket_name, storage_path="/"
 ):
 
     # Define helper classes
-    storage = Storage(cloud, bucket_name)
+    storage = Storage(bucket_name)
 
     # Download testing data
     storage.download_file(os.path.join(data_path, "test.npz"), os.path.join(storage_path, "test.npz"))
@@ -51,7 +51,6 @@ def aws_lambda(event, context):
         application_name=event["application_name"],
         bucket_name=event["bucket_name"],
         storage_path="/tmp/",
-        cloud="aws",
     )
 
 
@@ -61,8 +60,6 @@ if __name__ == "__main__":
     parser.add_argument('--hydrosphere-address', required=True)
     parser.add_argument('--acceptable-accuracy', type=float, required=True)
     parser.add_argument('--application-name', required=True)
-    parser.add_argument('--cloud', required=True)
-    parser.add_argument('--orchestrator')
     parser.add_argument('--bucket-name', required=True)
     
     args = parser.parse_args()
@@ -71,7 +68,6 @@ if __name__ == "__main__":
         hydrosphere_address=args.hydrosphere_address,
         acceptable_accuracy=args.acceptable_accuracy,
         application_name=args.application_name,
-        cloud=args.cloud,
         bucket_name=args.bucket_name,
     )
 

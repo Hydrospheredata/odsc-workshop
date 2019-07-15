@@ -3,9 +3,14 @@ import struct, numpy
 import os, gzip, tarfile, shutil, glob
 import urllib, urllib.parse, urllib.request
 import datetime, argparse
+from decouple import Config, RepositoryEnv
 
 from storage import * 
 from orchestrator import *
+
+
+config = Config(RepositoryEnv("config.env"))
+MNIST_URL = config('MNIST_URL')
 
 
 filenames = [
@@ -76,11 +81,11 @@ def download_mnist(base_url, storage_path):
     return [train_path, test_path]
 
 
-def main(cloud, orchestrator_type, hydrosphere_address, bucket_name, storage_path="/"):
+def main(hydrosphere_address, bucket_name, storage_path="/"):
     
     # Define helper classes
-    storage = Storage(cloud, bucket_name=bucket_name)
-    orchestrator = Orchestrator(orchestrator_type, storage_path=storage_path)
+    storage = Storage(bucket_name=bucket_name)
+    orchestrator = Orchestrator(storage_path=storage_path)
 
     # Define path, where to store files
     namespace = urllib.parse.urlparse(hydrosphere_address).netloc.split(".")[0]
@@ -88,7 +93,7 @@ def main(cloud, orchestrator_type, hydrosphere_address, bucket_name, storage_pat
         str(round(datetime.datetime.now().timestamp())))
     
     # Download and process MNIST files
-    processed_files = download_mnist("http://yann.lecun.com/exdb/mnist/", storage_path)
+    processed_files = download_mnist(MNIST_URL, storage_path)
 
     # Upload files to the cloud
     for filename in processed_files:
@@ -103,26 +108,20 @@ def main(cloud, orchestrator_type, hydrosphere_address, bucket_name, storage_pat
 
 def aws_lambda(event, context):
     return main(
-        cloud="aws",
-        orchestrator_type="step_functions",
         hydrosphere_address=event["hydrosphere_address"], 
-        storage_path="/tmp",
         bucket_name=event["bucket_name"],
+        storage_path="/tmp",
     )
 
 
 if __name__ == "__main__": 
     parser = argparse.ArgumentParser()
     parser.add_argument('--hydrosphere-address', required=True)
-    parser.add_argument('--cloud', required=True)
-    parser.add_argument('--orchestrator', required=True)
     parser.add_argument('--storage-path', default='/')
     parser.add_argument('--bucket-name', required=True)
 
     args = parser.parse_args()
     main(
-        cloud=args.cloud,
-        orchestrator_type=args.orchestrator,
         hydrosphere_address=args.hydrosphere_address, 
         storage_path=args.storage_path,
         bucket_name=args.bucket_name,

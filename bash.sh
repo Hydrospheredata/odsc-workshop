@@ -81,6 +81,7 @@ if [[ $BUILD_WORKERS && $BUILD_DOCKER ]]; then
   for path in steps/*; do 
     cp utilities/orchestrator.py $path
     cp utilities/storage.py $path
+    cp config.env $path
     TAG=$TAG envsubst '$TAG' < "$path/Dockerfile" > "$path/envsubDockerfile"
     docker build -t $DOCKER_ACCOUNT/mnist-pipeline-$(basename $path):$TAG \
       -f "$path/envsubDockerfile" $cache $path
@@ -88,6 +89,7 @@ if [[ $BUILD_WORKERS && $BUILD_DOCKER ]]; then
     rm "$path/envsubDockerfile"
     rm "$path/storage.py"
     rm "$path/orchestrator.py"
+    rm "$path/config.env"
   done
 fi 
 
@@ -132,11 +134,25 @@ if [[ $COMPILE_ORIGIN_PIPELINE ]]; then
 fi
 
 if [[ $COMPILE_SUBSAMPLE_PIPELINE ]]; then
-  echo "Compiling subsample pipeline"
-  if [ -z "$NAMESPACE" ]; then
-    python3 workflows/subsample.py
+  echo "Compiling origin pipeline"
+  if [ ! -z "$NAMESPACE" ]; then
+    if [ ! -z "$BUILD_AWS" ]; then
+      python3 workflows/subsample.py --aws -n $NAMESPACE
+    elif [ ! -z "$BUILD_GCP" ]; then
+      python3 workflows/subsample.py --gcp -n $NAMESPACE
+    else 
+      echo "Either --aws or --gcp flags should be passed"
+      exit 1
+    fi
   else
-    python3 workflows/subsample.py -n $NAMESPACE
+    if [ ! -z "$BUILD_AWS" ]; then
+      python3 workflows/subsample.py --aws
+    elif [ ! -z "$BUILD_GCP" ]; then
+      python3 workflows/subsample.py --gcp
+    else 
+      echo "Either --aws or --gcp flags should be passed"
+      exit 1
+    fi
   fi
   rm pipeline.tar.gz
 fi
@@ -144,10 +160,10 @@ fi
 # Run origin and subsample pipelines
 if [[ $RUN_ORIGIN_PIPELINE ]]; then
   echo "Running origin pipeline"
-  python3 kubeflow_client.py -n $NAMESPACE -f pipeline.yaml
+  python3 kubeflow.py -n $NAMESPACE -f pipeline.yaml
 fi
 
 if [[ $RUN_SUBSAMPLE_PIPELINE ]]; then
   echo "Running subsample pipeline"
-  python3 kubeflow_client.py -n $NAMESPACE -f pipeline.yaml
+  python3 kubeflow.py -n $NAMESPACE -f pipeline.yaml
 fi

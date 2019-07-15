@@ -4,16 +4,14 @@ from kfp.gcp import use_gcp_secret
 import kubernetes.client.models as k8s
 import argparse, os
 
-tag = os.environ.get("TAG", "latest")
 
-
-def parametrise_pipeline(cloud, secret_fn):
+def parametrise_pipeline(tag, secret_fn):
     """ Parametrise pipeline definition. """
 
     def pipeline_definition(
         hydrosphere_address,
         experiment_name, 
-        bucket_name="workshop-hydrosphere",
+        bucket_name="gs://workshop-hydrosphere",
         model_learning_rate="0.01",
         model_epochs="10",
         model_batch_size="256",
@@ -32,9 +30,7 @@ def parametrise_pipeline(cloud, secret_fn):
             image=f"hydrosphere/mnist-pipeline-download:{tag}",
             file_outputs={"data_path": "/data_path.txt"},
             arguments=[
-                "--cloud", cloud,
                 "--hydrosphere-address", hydrosphere_address,
-                "--orchestrator", "kubeflow",
                 "--bucket-name", bucket_name,
             ]
         ).apply(secret_fn())
@@ -58,8 +54,6 @@ def parametrise_pipeline(cloud, secret_fn):
                 "--batch-size", model_batch_size,
                 "--epochs", model_epochs,
                 "--hydrosphere-address", hydrosphere_address,
-                "--cloud", cloud,
-                "--orchestrator", "kubeflow",
                 "--experiment", experiment_name,
                 "--model-name", model_name, 
                 "--bucket-name", bucket_name,
@@ -84,11 +78,9 @@ def parametrise_pipeline(cloud, secret_fn):
                 "--batch-size", drift_detector_batch_size,
                 "--steps", drift_detector_steps,
                 "--hydrosphere-address", hydrosphere_address,
-                "--cloud", cloud,
-                "--orchestrator", "kubeflow",
                 "--experiment", experiment_name,
                 "--model-name", model_drift_detector_name,
-                "--bucket-name", bucket_name
+                "--bucket-name", bucket_name,
             ]
         ).apply(secret_fn())
         train_drift_detector.set_memory_request('2G')
@@ -112,9 +104,7 @@ def parametrise_pipeline(cloud, secret_fn):
                 "--steps", drift_detector_steps, 
                 "--loss", train_drift_detector.outputs["loss"],
                 "--classes", train_drift_detector.outputs["classes"],
-                "--cloud", cloud,
-                "--orchestrator", "kubeflow",
-                "--bucket-name", "workshop-hydrosphere",
+                "--bucket-name", bucket_name,
             ]
         ).apply(secret_fn())
 
@@ -131,8 +121,7 @@ def parametrise_pipeline(cloud, secret_fn):
                 "--application-name-postfix", "_app", 
                 "--hydrosphere-address", hydrosphere_address,
                 "--model-name", model_drift_detector_name,
-                "--cloud", cloud,
-                "--orchestrator", "kubeflow",
+                "--bucket-name", bucket_name,
             ],
         ).apply(secret_fn())
 
@@ -149,8 +138,6 @@ def parametrise_pipeline(cloud, secret_fn):
                 "--drift-detector-app", deploy_drift_detector_to_prod.outputs["application_name"],
                 "--model-name", model_name,
                 "--classes", train_model.outputs["classes"],
-                "--cloud", cloud,
-                "--orchestrator", "kubeflow",
                 "--bucket-name", bucket_name, 
                 "--data-path", download.outputs["data_path"],
                 "--model-path", train_model.outputs["model_path"],
@@ -177,9 +164,8 @@ def parametrise_pipeline(cloud, secret_fn):
                 "--model-version", release_model.outputs["model_version"],
                 "--application-name-postfix", "_stage_app", 
                 "--hydrosphere-address", hydrosphere_address,
+                "--bucket-name", bucket_name,
                 "--model-name", model_name,
-                "--cloud", cloud,
-                "--orchestrator", "kubeflow",
             ],
         ).apply(secret_fn())
 
@@ -192,8 +178,6 @@ def parametrise_pipeline(cloud, secret_fn):
                 "--hydrosphere-address", hydrosphere_address,
                 "--application-name", deploy_model_to_stage.outputs["application_name"], 
                 "--acceptable-accuracy", acceptable_accuracy,
-                "--cloud", cloud,
-                "--orchestrator", "kubeflow",
                 "--bucket-name", bucket_name,
             ],
         ).apply(secret_fn())
@@ -211,9 +195,13 @@ def parametrise_pipeline(cloud, secret_fn):
                 "--model-version", release_model.outputs["model_version"],
                 "--application-name-postfix", "_app", 
                 "--hydrosphere-address", hydrosphere_address,
+                "--bucket-name", bucket_name,
                 "--model-name", model_name,
-                "--cloud", cloud,
-                "--orchestrator", "kubeflow",
+                "--mlflow-model-link", train_model.outputs["mlflow_link"],
+                "--mlflow-drift-detector-link", train_drift_detector.outputs["mlflow_link"],
+                "--data-path", download.outputs["data_path"],
+                "--model-path", train_model.outputs["model_path"],
+                "--model-drift-detector-path", train_drift_detector.outputs["model_path"],
             ],
         ).apply(secret_fn())
         deploy_model_to_prod.after(test_model)
@@ -221,13 +209,13 @@ def parametrise_pipeline(cloud, secret_fn):
     return pipeline_definition
 
 
-def cloud_specific_pipeline_definition(is_aws=False, is_gcp=False):
+def cloud_specific_pipeline_definition(is_aws=False, is_gcp=False, **kwargs):
     if is_aws:
         return dsl.pipeline(name="MNIST", description="MNIST Workflow Example") \
-            (parametrise_pipeline(cloud="aws", secret_fn=use_aws_secret))
+            (parametrise_pipeline(tag=kwargs["tag"], secret_fn=use_aws_secret))
     if is_gcp:
         return dsl.pipeline(name="MNIST", description="MNIST Workflow Example") \
-            (parametrise_pipeline(cloud="gcp", secret_fn=use_gcp_secret))
+            (parametrise_pipeline(tag=kwargs["tag"], secret_fn=use_gcp_secret))
 
     raise NotImplementedError("Only AWS and GCP are supported at the moment")
 
@@ -238,18 +226,20 @@ if __name__ == "__main__":
 
     # Acquire parameters	
     parser = argparse.ArgumentParser()	
+    parser.add_argument('--tag', 
+        help="Which tag of image to use, when compiling pipeline", default="latest")
     parser.add_argument('--aws', action="store_true")
     parser.add_argument('--gcp', action="store_true")
-    parser.add_argument(	
+    parser.add_argument(
         '-n', '--namespace', help="Namespace, where kubeflow and serving are running")	
     args = parser.parse_args()
 
     # Compile pipeline
     assert args.aws or args.gcp, "Either --aws or --gcp should be provided"
     if args.aws: 
-        compiler.Compiler().compile(cloud_specific_pipeline_definition(is_aws=True), "pipeline.tar.gz")
+        compiler.Compiler().compile(cloud_specific_pipeline_definition(is_aws=True, tag=args.tag), "pipeline.tar.gz")
     if args.gcp:
-        compiler.Compiler().compile(cloud_specific_pipeline_definition(is_gcp=True), "pipeline.tar.gz")
+        compiler.Compiler().compile(cloud_specific_pipeline_definition(is_gcp=True, tag=args.tag), "pipeline.tar.gz")
     
     process = subprocess.run("tar -xvf pipeline.tar.gz".split())	
 

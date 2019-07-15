@@ -6,15 +6,17 @@ __all__ = ["Storage"]
 
 class Storage:
 
-    def __init__(self, cloud, bucket_name):
-        assert cloud in ("aws", "gcp"), "Only AWS and GCP clouds are supported"
+    def __init__(self, bucket_name):
+        result = urllib.parse.urlparse(bucket_name)
+        assert result.scheme, "Full URI to the bucket must be provided"
+        assert result.scheme in ('s3', 'gs'), "URI scheme must be either s3 or gs"
 
-        self.cloud = cloud
-        self.bucket_name = bucket_name
+        self.prefix = result.scheme
+        self.bucket_name = result.netloc
+        self.full_name = bucket_name
 
-        if self.cloud == 'aws': self.prefix = 's3'
-        if self.cloud == 'gcp': self.prefix = 'gs'
-        self.full_name = f'{self.prefix}://{self.bucket_name}'
+        if self.prefix == 's3': self.cloud = 'aws' 
+        if self.prefix == 'gs': self.cloud = 'gcp' 
 
         print(f"Initialized {self}")
     

@@ -7,7 +7,7 @@ __all__ = ["Orchestrator"]
 
 class Orchestrator:
 
-    def __init__(self, orchestrator_type, storage_path="./"):
+    def __init__(self, orchestrator_type="kubeflow", storage_path="./"):
         self.type = orchestrator_type
         self.storage_path = storage_path
         assert orchestrator_type in ("step_functions", "kubeflow")
@@ -21,26 +21,6 @@ class Orchestrator:
         with open(filename, "w+") as file: 
             file.write(content)
 
-    def export(self, parameters):
-        if self.type is None:
-            return None 
-        
-        if self.type == "step_functions":
-            return parameters
-
-        if self.type == "kubeflow":
-            for key, value in parameters.items():
-                extension = "txt"
-                if not isinstance(value, str) and isinstance(value, Iterable):
-                    extension = value[0]; value = value[1]
-                value = json.dumps(value) if isinstance(value, dict) else str(value)
-
-                path = os.path.join(self.storage_path, f'{key}.{extension}')
-                with open(path, "w+") as file:
-                    file.write(value)
-                
-                print(f"Written new file {path}", flush=True)
-    
     def export_meta(self, key, value, extension=None):
         if extension is not None:
             key = f"{key}.{extension}"

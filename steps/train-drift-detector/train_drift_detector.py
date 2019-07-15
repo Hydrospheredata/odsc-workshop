@@ -3,9 +3,14 @@ import shutil, urllib, datetime
 import numpy as np
 import tensorflow as tf
 import mlflow
+from decouple import Config, RepositoryEnv
 
 from storage import *
 from orchestrator import *
+
+
+config = Config(RepositoryEnv("config.env"))
+MLFLOW_LINK = config("MLFLOW_LINK")
 
 
 def encoder(x, weights, biases):
@@ -21,20 +26,20 @@ def decoder(x, weights, biases):
 
 
 def main(
-    cloud, orchestrator_type, data_path, hydrosphere_address, learning_rate, 
-    steps, batch_size, experiment, model_name, bucket_name
+    data_path, hydrosphere_address, learning_rate, steps, batch_size, 
+    experiment, model_name, bucket_name, storage_path="/"
 ): 
 
     # Define helper classes
-    storage = Storage(cloud, bucket_name=bucket_name)
-    orchestrator = Orchestrator(orchestrator_type, storage_path="/")
+    storage = Storage(bucket_name)
+    orchestrator = Orchestrator(storage_path=storage_path)
 
     # Set up environment and variables
     namespace = urllib.parse.urlparse(hydrosphere_address).netloc.split(".")[0]
     model_path = os.path.join(namespace, "model", "mnist-drift-detector", str(round(datetime.datetime.now().timestamp())))
 
     # Log params into Mlflow
-    mlflow.set_tracking_uri("http://mlflow-service:5000")
+    mlflow.set_tracking_uri(MLFLOW_LINK)
     mlflow.set_experiment(f'{experiment}.{model_name}') 
     mlflow.log_params({
         "data_path": data_path,
@@ -152,7 +157,7 @@ def main(
     mlflow.log_param("model_path", os.path.join(storage.full_name, model_path))
     
     run = mlflow.active_run()
-    mlflow_link = f"/#/experiments/{run.info.experiment_id}/runs/{run.info.run_id}"
+    mlflow_link = f"{MLFLOW_LINK}/#/experiments/{run.info.experiment_id}/runs/{run.info.run_id}"
 
     orchestrator.export_meta("mlpipeline-metrics", metrics, "json")
     orchestrator.export_meta("model_path", os.path.join(storage.full_name, model_path), "txt")
@@ -170,8 +175,6 @@ if __name__ == "__main__":
     parser.add_argument('--epochs', type=int, default=10)
     parser.add_argument('--steps', type=int, default=1000)
     parser.add_argument('--batch-size', type=int, default=256)
-    parser.add_argument('--cloud', required=True)
-    parser.add_argument('--orchestrator', default=None)
     parser.add_argument('--experiment', required=True)
     parser.add_argument('--model-name', required=True)
     parser.add_argument('--bucket-name', required=True)
@@ -183,8 +186,6 @@ if __name__ == "__main__":
         learning_rate=args.learning_rate,
         steps=args.steps,
         batch_size=args.batch_size,
-        cloud=args.cloud, 
-        orchestrator_type=args.orchestrator,
         experiment=args.experiment,
         model_name=args.model_name,
         bucket_name=args.bucket_name,

@@ -1,6 +1,7 @@
 FROM hydrosphere/odsc-workshop-base:$TAG
 
-ADD ./subsample.py /src/
-
+COPY *.py /src/
+COPY config.env /src/
 WORKDIR /src/
+
 ENTRYPOINT [ "python", "subsample.py" ]
