@@ -117,8 +117,7 @@ if [[ $COMPILE_ORIGIN_PIPELINE ]]; then
     elif [ ! -z "$BUILD_GCP" ]; then
       python3 workflows/origin.py --gcp -n $NAMESPACE
     else 
-      echo "Either --aws or --gcp flags should be passed"
-      exit 1
+      python3 workflows/origin.py -n $NAMESPACE
     fi
   else
     if [ ! -z "$BUILD_AWS" ]; then
@@ -126,11 +125,9 @@ if [[ $COMPILE_ORIGIN_PIPELINE ]]; then
     elif [ ! -z "$BUILD_GCP" ]; then
       python3 workflows/origin.py --gcp
     else 
-      echo "Either --aws or --gcp flags should be passed"
-      exit 1
+      python3 workflows/origin.py
     fi
   fi
-  rm pipeline.tar.gz
 fi
 
 if [[ $COMPILE_SUBSAMPLE_PIPELINE ]]; then
@@ -141,8 +138,7 @@ if [[ $COMPILE_SUBSAMPLE_PIPELINE ]]; then
     elif [ ! -z "$BUILD_GCP" ]; then
       python3 workflows/subsample.py --gcp -n $NAMESPACE
     else 
-      echo "Either --aws or --gcp flags should be passed"
-      exit 1
+      python3 workflows/subsample.py -n $NAMESPACE
     fi
   else
     if [ ! -z "$BUILD_AWS" ]; then
@@ -150,11 +146,9 @@ if [[ $COMPILE_SUBSAMPLE_PIPELINE ]]; then
     elif [ ! -z "$BUILD_GCP" ]; then
       python3 workflows/subsample.py --gcp
     else 
-      echo "Either --aws or --gcp flags should be passed"
-      exit 1
+      python3 workflows/subsample.py
     fi
   fi
-  rm pipeline.tar.gz
 fi
 
 # Run origin and subsample pipelines
