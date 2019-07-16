@@ -12,10 +12,7 @@ config = Config(RepositoryEnv("config.env"))
 MLFLOW_LINK = config("MLFLOW_LINK")
 
 
-def main(
-    data_path, learning_rate, epochs, batch_size, bucket_name, 
-    experiment, model_name, storage_path="/"
-):
+def main(data_path, learning_rate, epochs, batch_size, bucket_name, model_name, storage_path="/"):
 
     # Define helper classes
     storage = Storage(bucket_name)
@@ -27,7 +24,7 @@ def main(
 
     # Log params into Mlflow
     mlflow.set_tracking_uri(MLFLOW_LINK)
-    mlflow.set_experiment(f'{experiment}.{model_name}') 
+    mlflow.set_experiment(f'Default.{model_name}')  # Example usage
     mlflow.log_params({
         "data_path": data_path,
         "learning_rate": learning_rate,
@@ -190,7 +187,6 @@ if __name__ == "__main__":
     parser.add_argument('--epochs', type=int, default=10)
     parser.add_argument('--steps', type=int, default=3500)
     parser.add_argument('--batch-size', type=int, default=256)
-    parser.add_argument('--experiment', required=True)
     parser.add_argument('--model-name', required=True)
     parser.add_argument('--bucket-name', required=True)
     
@@ -200,7 +196,6 @@ if __name__ == "__main__":
         learning_rate=args.learning_rate,
         epochs=args.epochs,
         batch_size=args.batch_size,
-        experiment=args.experiment,
         model_name=args.model_name,
         bucket_name=args.bucket_name,
     )

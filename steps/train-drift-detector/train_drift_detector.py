@@ -25,10 +25,7 @@ def decoder(x, weights, biases):
     return layer_2
 
 
-def main(
-    data_path, learning_rate, steps, batch_size, 
-    experiment, model_name, bucket_name, storage_path="/"
-): 
+def main(data_path, learning_rate, steps, batch_size, model_name, bucket_name, storage_path="/"): 
 
     # Define helper classes
     storage = Storage(bucket_name)
@@ -39,7 +36,7 @@ def main(
 
     # Log params into Mlflow
     mlflow.set_tracking_uri(MLFLOW_LINK)
-    mlflow.set_experiment(f'{experiment}.{model_name}') 
+    mlflow.set_experiment(f'Default.{model_name}')  # Example usage
     mlflow.log_params({
         "data_path": data_path,
         "learning_rate": learning_rate,
@@ -174,7 +171,6 @@ if __name__ == "__main__":
     parser.add_argument('--epochs', type=int, default=10)
     parser.add_argument('--steps', type=int, default=1000)
     parser.add_argument('--batch-size', type=int, default=256)
-    parser.add_argument('--experiment', required=True)
     parser.add_argument('--model-name', required=True)
     parser.add_argument('--bucket-name', required=True)
     
@@ -184,7 +180,6 @@ if __name__ == "__main__":
         learning_rate=args.learning_rate,
         steps=args.steps,
         batch_size=args.batch_size,
-        experiment=args.experiment,
         model_name=args.model_name,
         bucket_name=args.bucket_name,
     )

@@ -11,6 +11,11 @@ class Orchestrator:
         self.type = orchestrator_type
         self.storage_path = storage_path
         assert orchestrator_type in ("step_functions", "kubeflow")
+
+        print(f"Initialized {self}")
+    
+    def __repr__(self):
+        return f"Orchestrator(type={self.type})"
     
     def _serialize_value(self, value, extension):
         if extension == "json":

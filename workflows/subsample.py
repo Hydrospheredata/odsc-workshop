@@ -7,7 +7,6 @@ import argparse, os
 
 @dsl.pipeline(name="MNIST", description="MNIST Workflow Example")
 def pipeline_definition(
-    experiment_name, 
     application_name,
     bucket_name="gs://workshop-hydrosphere",
     model_learning_rate="0.01",
@@ -51,7 +50,6 @@ def pipeline_definition(
             "--learning-rate", model_learning_rate,
             "--batch-size", model_batch_size,
             "--epochs", model_epochs,
-            "--experiment", experiment_name,
             "--model-name", model_name, 
             "--bucket-name", bucket_name,
         ]
@@ -74,7 +72,6 @@ def pipeline_definition(
             "--learning-rate", drift_detector_learning_rate,
             "--batch-size", drift_detector_batch_size,
             "--steps", drift_detector_steps,
-            "--experiment", experiment_name,
             "--model-name", model_drift_detector_name,
             "--bucket-name", bucket_name
         ]

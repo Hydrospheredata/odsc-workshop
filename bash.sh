@@ -131,7 +131,7 @@ if [[ $COMPILE_ORIGIN_PIPELINE ]]; then
 fi
 
 if [[ $COMPILE_SUBSAMPLE_PIPELINE ]]; then
-  echo "Compiling origin pipeline"
+  echo "Compiling subsample pipeline"
   if [ ! -z "$NAMESPACE" ]; then
     if [ ! -z "$BUILD_AWS" ]; then
       python3 workflows/subsample.py --aws -n $NAMESPACE

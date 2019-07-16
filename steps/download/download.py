@@ -118,6 +118,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     main(
-        bucket_name=args.bucket_name,
         storage_path=args.storage_path,
+        bucket_name=args.bucket_name,
     )
