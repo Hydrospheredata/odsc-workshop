@@ -9,7 +9,6 @@ def parametrise_pipeline(tag, secret_fn):
     """ Parametrise pipeline definition. """
 
     def pipeline_definition(
-        hydrosphere_address,
         experiment_name, 
         bucket_name="gs://workshop-hydrosphere",
         model_learning_rate="0.01",
@@ -30,7 +29,6 @@ def parametrise_pipeline(tag, secret_fn):
             image=f"hydrosphere/mnist-pipeline-download:{tag}",
             file_outputs={"data_path": "/data_path.txt"},
             arguments=[
-                "--hydrosphere-address", hydrosphere_address,
                 "--bucket-name", bucket_name,
             ]
         ).apply(secret_fn())
@@ -53,7 +51,6 @@ def parametrise_pipeline(tag, secret_fn):
                 "--learning-rate", model_learning_rate,
                 "--batch-size", model_batch_size,
                 "--epochs", model_epochs,
-                "--hydrosphere-address", hydrosphere_address,
                 "--experiment", experiment_name,
                 "--model-name", model_name, 
                 "--bucket-name", bucket_name,
@@ -77,7 +74,6 @@ def parametrise_pipeline(tag, secret_fn):
                 "--learning-rate", drift_detector_learning_rate,
                 "--batch-size", drift_detector_batch_size,
                 "--steps", drift_detector_steps,
-                "--hydrosphere-address", hydrosphere_address,
                 "--experiment", experiment_name,
                 "--model-name", model_drift_detector_name,
                 "--bucket-name", bucket_name,
@@ -97,7 +93,6 @@ def parametrise_pipeline(tag, secret_fn):
             arguments=[
                 "--data-path", download.outputs["data_path"],
                 "--model-path", train_drift_detector.outputs["model_path"],
-                "--hydrosphere-address", hydrosphere_address,
                 "--model-name", model_drift_detector_name,
                 "--learning-rate", drift_detector_learning_rate,
                 "--batch-size", drift_detector_batch_size,
@@ -119,7 +114,6 @@ def parametrise_pipeline(tag, secret_fn):
             arguments=[
                 "--model-version", release_drift_detector.outputs["model_version"],
                 "--application-name-postfix", "_app", 
-                "--hydrosphere-address", hydrosphere_address,
                 "--model-name", model_drift_detector_name,
                 "--bucket-name", bucket_name,
             ],
@@ -134,7 +128,6 @@ def parametrise_pipeline(tag, secret_fn):
                 "model_link": "/model_link.txt"
             },
             arguments=[
-                "--hydrosphere-address", hydrosphere_address,
                 "--drift-detector-app", deploy_drift_detector_to_prod.outputs["application_name"],
                 "--model-name", model_name,
                 "--classes", train_model.outputs["classes"],
@@ -163,7 +156,6 @@ def parametrise_pipeline(tag, secret_fn):
             arguments=[
                 "--model-version", release_model.outputs["model_version"],
                 "--application-name-postfix", "_stage_app", 
-                "--hydrosphere-address", hydrosphere_address,
                 "--bucket-name", bucket_name,
                 "--model-name", model_name,
             ],
@@ -175,7 +167,6 @@ def parametrise_pipeline(tag, secret_fn):
             image=f"hydrosphere/mnist-pipeline-test:{tag}", 
             arguments=[
                 "--data-path", download.outputs["data_path"],
-                "--hydrosphere-address", hydrosphere_address,
                 "--application-name", deploy_model_to_stage.outputs["application_name"], 
                 "--acceptable-accuracy", acceptable_accuracy,
                 "--bucket-name", bucket_name,
@@ -194,7 +185,6 @@ def parametrise_pipeline(tag, secret_fn):
             arguments=[
                 "--model-version", release_model.outputs["model_version"],
                 "--application-name-postfix", "_app", 
-                "--hydrosphere-address", hydrosphere_address,
                 "--bucket-name", bucket_name,
                 "--model-name", model_name,
                 "--mlflow-model-link", train_model.outputs["mlflow_link"],
@@ -230,8 +220,6 @@ if __name__ == "__main__":
         help="Which tag of image to use, when compiling pipeline", default="latest")
     parser.add_argument('--aws', action="store_true")
     parser.add_argument('--gcp', action="store_true")
-    parser.add_argument(
-        '-n', '--namespace', help="Namespace, where kubeflow and serving are running")	
     args = parser.parse_args()
 
     # Compile pipeline
@@ -240,9 +228,4 @@ if __name__ == "__main__":
         compiler.Compiler().compile(cloud_specific_pipeline_definition(is_aws=True, tag=args.tag), "pipeline.tar.gz")
     if args.gcp:
         compiler.Compiler().compile(cloud_specific_pipeline_definition(is_gcp=True, tag=args.tag), "pipeline.tar.gz")
-    
-    process = subprocess.run("tar -xvf pipeline.tar.gz".split())	
-
-    # Replace hardcoded namespaces	
-    if args.namespace: 
-        process = subprocess.run(f"sed -i \"s/minio-service.kubeflow/minio-service.{args.namespace}/g\" pipeline.yaml".split())	
+    process = subprocess.run("tar -xvf pipeline.tar.gz".split())

@@ -10,6 +10,7 @@ from orchestrator import *
 
 
 config = Config(RepositoryEnv("config.env"))
+HYDROSPHERE_LINK = config('HYDROSPHERE_LINK')
 POSTGRES_HOST = config('POSTGRES_HOST')
 POSTGRES_PASS = config('POSTGRES_PASS')
 POSTGRES_USER = config('POSTGRES_USER')
@@ -24,19 +25,18 @@ def get_model_version_id(host_address, application_name):
     return resp["executionGraph"]["stages"][0]["modelVariants"][0]["modelVersion"]["id"]
 
 
-def main(hydrosphere_address, application_name, bucket_name, storage_path="/"):
+def main(application_name, bucket_name, storage_path="/"):
 
     # Define helper classes     
     storage = Storage(bucket_name) 
     orchestrator = Orchestrator(storage_path=storage_path)
 
     # Define required variables
-    namespace = urllib.parse.urlparse(hydrosphere_address).netloc.split(".")[0]
-    data_path = os.path.join(namespace, "data", "mnist", str(round(datetime.datetime.now().timestamp())))
-    reqstore_address = urllib.parse.urljoin(hydrosphere_address, "reqstore")
+    data_path = os.path.join("data", str(round(datetime.datetime.now().timestamp())))
+    reqstore_address = urllib.parse.urljoin(HYDROSPHERE_LINK, "reqstore")
 
     client = ReqstoreHttpClient(reqstore_address)
-    model_version_id = str(get_model_version_id(hydrosphere_address, application_name))
+    model_version_id = str(get_model_version_id(HYDROSPHERE_LINK, application_name))
 
     # Initialize connection to Database 
     conn = psycopg2.connect(
@@ -93,7 +93,6 @@ def main(hydrosphere_address, application_name, bucket_name, storage_path="/"):
 
 def aws_lambda(event, context):
     return main(
-        hydrosphere_address=event["hydrosphere_address"],
         application_name=event["application_name"],
         bucket_name=event["bucket_name"],
         storage_path="/tmp/"
@@ -103,13 +102,11 @@ def aws_lambda(event, context):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--hydrosphere-address', required=True)
     parser.add_argument('--application-name', required=True)
     parser.add_argument('--bucket-name', required=True)
     
     args = parser.parse_args()
     main(
-        hydrosphere_address=args.hydrosphere_address,
         application_name=args.application_name,
         bucket_name=args.bucket_name,
     )

@@ -1,14 +1,16 @@
 import os, time, requests, sys
 import numpy as np
 import argparse
+from decouple import Config, RepositoryEnv
 
 from storage import * 
 
 
-def main(
-    data_path, hydrosphere_address, acceptable_accuracy, 
-    application_name, bucket_name, storage_path="/"
-):
+config = Config(RepositoryEnv("config.env"))
+HYDROSPHERE_LINK = config('HYDROSPHERE_LINK')
+
+
+def main(data_path, acceptable_accuracy, application_name, bucket_name, storage_path="/"):
 
     # Define helper classes
     storage = Storage(bucket_name)
@@ -23,7 +25,7 @@ def main(
     
     # Define variables 
     requests_delay = 0.2
-    service_link = f"{hydrosphere_address}/gateway/application/{application_name}"
+    service_link = f"{HYDROSPHERE_LINK}/gateway/application/{application_name}"
     print(f"Using URL :: {service_link}", flush=True)
 
     # Collect responses
@@ -46,7 +48,6 @@ def main(
 def aws_lambda(event, context):
     return main(
         data_path=event["data_path"],
-        hydrosphere_address=event["hydrosphere_address"],
         acceptable_accuracy=event["acceptable_accuracy"],
         application_name=event["application_name"],
         bucket_name=event["bucket_name"],
@@ -57,7 +58,6 @@ def aws_lambda(event, context):
 if __name__ == "__main__": 
     parser = argparse.ArgumentParser()
     parser.add_argument('--data-path', required=True)
-    parser.add_argument('--hydrosphere-address', required=True)
     parser.add_argument('--acceptable-accuracy', type=float, required=True)
     parser.add_argument('--application-name', required=True)
     parser.add_argument('--bucket-name', required=True)
@@ -65,7 +65,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
     main(
         data_path=args.data_path,
-        hydrosphere_address=args.hydrosphere_address,
         acceptable_accuracy=args.acceptable_accuracy,
         application_name=args.application_name,
         bucket_name=args.bucket_name,

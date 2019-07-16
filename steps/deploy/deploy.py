@@ -1,14 +1,19 @@
 import argparse, csv, datetime
 import os, urllib.parse
 from hydrosdk import sdk
+from decouple import Config, RepositoryEnv
 
 from storage import * 
 from orchestrator import *
 
 
+config = Config(RepositoryEnv("config.env"))
+HYDROSPHERE_LINK = config("HYDROSPHERE_LINK")
+
+
 def main(
     model_version, model_name, application_name_postfix, 
-    hydrosphere_address, bucket_name, storage_path="/", **kwargs
+    bucket_name, storage_path="/", **kwargs
 ):
     
     # Define helper class
@@ -20,17 +25,17 @@ def main(
     model = sdk.Model.from_existing(model_name, model_version)
     
     application = sdk.Application.singular(application_name, model)
-    result = application.apply(hydrosphere_address)
+    result = application.apply(HYDROSPHERE_LINK)
     print(result)
 
     # Export meta to the orchestrator
-    application_link = urllib.parse.urljoin(hydrosphere_address, f"applications/{application_name}")
+    application_link = urllib.parse.urljoin(HYDROSPHERE_LINK, f"applications/{application_name}")
     orchestrator.export_meta("application_name", application_name, "txt")
     orchestrator.export_meta("application_link", application_link, "txt")
     
     if kwargs.get("mlflow_model_link"):
 
-        with open('output.csv', 'w+', newline='') as file:
+        with open(os.path.join(storage_path, 'output.csv'), 'w+', newline='') as file:
             fieldnames = ['key', 'value']
             writer = csv.DictWriter(file, fieldnames=fieldnames)
             writer.writerow({'key': 'mlflow-model-link', 'value': kwargs["mlflow_model_link"]})
@@ -40,22 +45,24 @@ def main(
             writer.writerow({'key': 'model-path', 'value': kwargs["model_path"]})
             writer.writerow({'key': 'model-drift-detector-path', 'value': kwargs["model_drift_detector_path"]})
 
-        namespace = urllib.parse.urlparse(hydrosphere_address).netloc.split(".")[0]
-        run_path = os.path.join(namespace, "run", str(round(datetime.datetime.now().timestamp())))
-        output_cloud_path = storage.upload_file("output.csv", os.path.join(run_path, "output.csv"))
+        run_path = os.path.join("run", str(round(datetime.datetime.now().timestamp())))
+        output_cloud_path = storage.upload_file(
+            os.path.join(storage_path, 'output.csv'), 
+            os.path.join(run_path, "output.csv"))
 
-        metadata = {
-            'outputs': [
-                {
+        orchestrator.export_meta(
+            key="mlpipeline-ui-metadata", 
+            value={
+                'outputs': [{
                     'type': 'table',
                     'storage': storage.prefix,
                     'format': 'csv',
                     'source': output_cloud_path,
                     'header': ['key', 'value'],
-                }
-            ]
-        }
-        orchestrator.export_meta("mlpipeline-ui-metadata", metadata, "json")
+                }]
+            }, 
+            extension="json"
+        )
 
 
 def aws_lambda(event, context):
@@ -63,7 +70,6 @@ def aws_lambda(event, context):
         model_version=event["model_version"],
         model_name=event["model_name"],
         application_name_postfix=event["application_name_postfix"],
-        hydrosphere_address=event["hydrosphere_address"],
         bucket_name=event["bucket_name"],
         storage_path="/tmp/"
     )
@@ -74,7 +80,6 @@ if __name__ == '__main__':
     parser.add_argument('--model-version', required=True)
     parser.add_argument('--model-name', required=True)
     parser.add_argument('--application-name-postfix', required=True)
-    parser.add_argument('--hydrosphere-address', required=True)
     parser.add_argument('--bucket-name', required=True)
     parser.add_argument('--mlflow-model-link')
     parser.add_argument('--mlflow-drift-detector-link')
@@ -87,7 +92,6 @@ if __name__ == '__main__':
         model_version=args.model_version,
         model_name=args.model_name,
         application_name_postfix=args.application_name_postfix, 
-        hydrosphere_address=args.hydrosphere_address,
         bucket_name=args.bucket_name,
         mlflow_model_link=args.mlflow_model_link,
         mlflow_drift_detector_link=args.mlflow_drift_detector_link,

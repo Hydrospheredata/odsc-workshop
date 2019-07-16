@@ -9,12 +9,10 @@ from orchestrator import *
 
 config = Config(RepositoryEnv("config.env"))
 TENSORFLOW_RUNTIME = config('TENSORFLOW_RUNTIME')
+HYDROSPHERE_LINK = config('HYDROSPHERE_LINK')
 
 
-def main(
-    hydrosphere_address, drift_detector_app, model_name, classes, 
-    bucket_name, storage_path="/", **kwargs
-):
+def main(drift_detector_app, model_name, classes, bucket_name, storage_path="/", **kwargs):
     
     storage = Storage(bucket_name)
     orchestrator = Orchestrator(storage_path=storage_path)
@@ -42,18 +40,18 @@ def main(
         'model_path': kwargs["model_path"],
     }
 
-    signature = sdk.Signature('predict')\
-        .with_input('imgs', 'float32', [-1, 28, 28, 1], 'image')\
-        .with_output('probabilities', 'float32', [-1, classes])\
-        .with_output('class_ids', 'int64', [-1, 1])\
-        .with_output('logits', 'float32', [-1, classes])\
+    signature = sdk.Signature('predict') \
+        .with_input('imgs', 'float32', [-1, 28, 28, 1], 'image') \
+        .with_output('probabilities', 'float32', [-1, classes]) \
+        .with_output('class_ids', 'int64', [-1, 1]) \
+        .with_output('logits', 'float32', [-1, classes]) \
         .with_output('classes', 'string', [-1, 1])
 
     monitoring = [
         sdk.Monitoring('Requests').with_spec('CounterMetricSpec', interval=15),
         sdk.Monitoring('Latency').with_spec('LatencyMetricSpec', interval=15),
         sdk.Monitoring('Accuracy').with_spec('AccuracyMetricSpec'),
-        sdk.Monitoring('Autoencoder') \
+        sdk.Monitoring('Drift Detector') \
             .with_health(True) \
             .with_spec(
                 kind='ImageAEMetricSpec', 
@@ -70,16 +68,15 @@ def main(
         .with_signature(signature) \
         .with_monitoring(monitoring)
 
-    result = model.apply(hydrosphere_address)
+    result = model.apply(HYDROSPHERE_LINK)
     print(result)
 
     orchestrator.export_meta("model_version", result["modelVersion"], "txt")
     orchestrator.export_meta("model_link", urllib.parse.urljoin(
-        hydrosphere_address, f"/models/{result['model']['id']}/{result['id']}/details"), "txt")
+        HYDROSPHERE_LINK, f"/models/{result['model']['id']}/{result['id']}/details"), "txt")
 
 def aws_lambda(event, context):
     return main(
-        hydrosphere_address=event["hydrosphere_address"],
         drift_detector_app=event["drift_detector_app"],
         model_name=event["model_name"],
         classes=event["classes"],
@@ -101,7 +98,6 @@ def aws_lambda(event, context):
 if __name__ == "__main__": 
     parser = argparse.ArgumentParser()
     
-    parser.add_argument('--hydrosphere-address', required=True)
     parser.add_argument('--drift-detector-app', required=True)
     parser.add_argument('--model-name', required=True)
     parser.add_argument('--classes', type=int, required=True)
@@ -120,7 +116,6 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     main(
-        hydrosphere_address=args.hydrosphere_address,
         drift_detector_app=args.drift_detector_app,
         model_name=args.model_name,
         classes=args.classes,

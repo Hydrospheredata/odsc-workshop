@@ -9,10 +9,11 @@ from orchestrator import *
 
 config = Config(RepositoryEnv("config.env"))
 TENSORFLOW_RUNTIME = config('TENSORFLOW_RUNTIME')
+HYDROSPHERE_LINK = config('HYDROSPHERE_LINK')
 
 
 def main(
-    data_path, model_path, hydrosphere_address, model_name, loss, learning_rate, 
+    data_path, model_path, model_name, loss, learning_rate, 
     steps, classes, batch_size, bucket_name, storage_path="/"
 ):
 
@@ -53,19 +54,18 @@ def main(
         .with_payload(payload) \
         .with_signature(signature)
 
-    result = model.apply(hydrosphere_address)
+    result = model.apply(HYDROSPHERE_LINK)
     print(result)
 
     orchestrator.export_meta("model_version", result["modelVersion"], "txt")
     orchestrator.export_meta("model_link", urllib.parse.urljoin(
-        hydrosphere_address, f"/models/{result['model']['id']}/{result['id']}/details"), "txt")
+        HYDROSPHERE_LINK, f"/models/{result['model']['id']}/{result['id']}/details"), "txt")
 
 
 def aws_lambda(event, context):
     return main(
         data_path=event["data_path"],
         model_path=event["model_path"],
-        hydrosphere_address=event["hydrosphere_address"],
         model_name=event["model_name"],
         loss=event["loss"],
         learning_rate=event["learning_rate"],
@@ -82,7 +82,6 @@ if __name__ == "__main__":
     
     parser.add_argument('--data-path', required=True)
     parser.add_argument('--model-path', required=True)
-    parser.add_argument('--hydrosphere-address', required=True)
     parser.add_argument('--model-name', required=True)
     parser.add_argument('--learning-rate', required=True)
     parser.add_argument('--batch-size', required=True)
@@ -95,7 +94,6 @@ if __name__ == "__main__":
     main(
         data_path=args.data_path,
         model_path=args.model_path,
-        hydrosphere_address=args.hydrosphere_address,
         model_name=args.model_name,
         loss=args.loss,
         learning_rate=args.learning_rate,

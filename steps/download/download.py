@@ -81,16 +81,14 @@ def download_mnist(base_url, storage_path):
     return [train_path, test_path]
 
 
-def main(hydrosphere_address, bucket_name, storage_path="/"):
+def main(bucket_name, storage_path="/"):
     
     # Define helper classes
     storage = Storage(bucket_name=bucket_name)
     orchestrator = Orchestrator(storage_path=storage_path)
 
     # Define path, where to store files
-    namespace = urllib.parse.urlparse(hydrosphere_address).netloc.split(".")[0]
-    data_path = os.path.join(namespace, "data", "mnist", 
-        str(round(datetime.datetime.now().timestamp())))
+    data_path = os.path.join("data", str(round(datetime.datetime.now().timestamp())))
     
     # Download and process MNIST files
     processed_files = download_mnist(MNIST_URL, storage_path)
@@ -108,7 +106,6 @@ def main(hydrosphere_address, bucket_name, storage_path="/"):
 
 def aws_lambda(event, context):
     return main(
-        hydrosphere_address=event["hydrosphere_address"], 
         bucket_name=event["bucket_name"],
         storage_path="/tmp",
     )
@@ -116,13 +113,11 @@ def aws_lambda(event, context):
 
 if __name__ == "__main__": 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--hydrosphere-address', required=True)
     parser.add_argument('--storage-path', default='/')
     parser.add_argument('--bucket-name', required=True)
 
     args = parser.parse_args()
     main(
-        hydrosphere_address=args.hydrosphere_address, 
-        storage_path=args.storage_path,
         bucket_name=args.bucket_name,
+        storage_path=args.storage_path,
     )

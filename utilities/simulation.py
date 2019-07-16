@@ -65,7 +65,7 @@ def simulate_production_traffic(application_name="mnist_app", host=None, request
         tensor = hs.TensorProto(dtype=hs.DT_FLOAT, tensor_shape=tensor_shape, 
             float_val=image.flatten().tolist())
         request = hs.PredictRequest(model_spec=model_spec, inputs={"imgs": tensor})
-        result = stub.Predict(request)
+        stub.Predict(request)
 
         # insert uid and ground_truth labels into database
         cur.execute("INSERT INTO requests VALUES (%s, %s)",

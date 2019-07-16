@@ -26,7 +26,7 @@ def decoder(x, weights, biases):
 
 
 def main(
-    data_path, hydrosphere_address, learning_rate, steps, batch_size, 
+    data_path, learning_rate, steps, batch_size, 
     experiment, model_name, bucket_name, storage_path="/"
 ): 
 
@@ -35,8 +35,7 @@ def main(
     orchestrator = Orchestrator(storage_path=storage_path)
 
     # Set up environment and variables
-    namespace = urllib.parse.urlparse(hydrosphere_address).netloc.split(".")[0]
-    model_path = os.path.join(namespace, "model", "mnist-drift-detector", str(round(datetime.datetime.now().timestamp())))
+    model_path = os.path.join("model", "mnist-drift-detector", str(round(datetime.datetime.now().timestamp())))
 
     # Log params into Mlflow
     mlflow.set_tracking_uri(MLFLOW_LINK)
@@ -111,8 +110,9 @@ def main(
         for i in range(1, steps+1):
             batch = sess.run(next_element)[0]
             _, l = sess.run([optimizer, loss], feed_dict={imgs_placeholder: batch})
-            mlflow.log_metric("loss", np.mean(l))
 
+            if i % 10 == 0:
+                mlflow.log_metric("loss", np.mean(l))
             if i % 500 == 0 or i == 1:
                 print(f'Step {i}: Minibatch Loss: {np.mean(l)}', flush=True)
 
@@ -170,7 +170,6 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--data-path', required=True)
-    parser.add_argument('--hydrosphere-address', required=True)
     parser.add_argument('--learning-rate', type=float, default=0.01)
     parser.add_argument('--epochs', type=int, default=10)
     parser.add_argument('--steps', type=int, default=1000)
@@ -182,7 +181,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
     main(
         data_path=args.data_path,
-        hydrosphere_address=args.hydrosphere_address,
         learning_rate=args.learning_rate,
         steps=args.steps,
         batch_size=args.batch_size,

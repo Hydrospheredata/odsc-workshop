@@ -13,8 +13,8 @@ MLFLOW_LINK = config("MLFLOW_LINK")
 
 
 def main(
-    data_path, hydrosphere_address, learning_rate, epochs, 
-    batch_size, bucket_name, experiment, model_name, storage_path="/"
+    data_path, learning_rate, epochs, batch_size, bucket_name, 
+    experiment, model_name, storage_path="/"
 ):
 
     # Define helper classes
@@ -23,8 +23,7 @@ def main(
 
     # Set up environment and variables
     tf.logging.set_verbosity(tf.logging.INFO)
-    namespace = urllib.parse.urlparse(hydrosphere_address).netloc.split(".")[0]
-    model_path = os.path.join(namespace, "model", "mnist")
+    model_path = os.path.join("model", "mnist")
 
     # Log params into Mlflow
     mlflow.set_tracking_uri(MLFLOW_LINK)
@@ -187,7 +186,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         '--data-path', help='Path, where the current run\'s data was stored', required=True)
-    parser.add_argument('--hydrosphere-address', required=True)
     parser.add_argument('--learning-rate', type=float, default=0.01)
     parser.add_argument('--epochs', type=int, default=10)
     parser.add_argument('--steps', type=int, default=3500)
@@ -199,7 +197,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
     main(
         data_path=args.data_path,
-        hydrosphere_address=args.hydrosphere_address,
         learning_rate=args.learning_rate,
         epochs=args.epochs,
         batch_size=args.batch_size,
