@@ -7,11 +7,11 @@ import hashlib
 from decouple import Config, RepositoryEnv
 
 config = Config(RepositoryEnv("../config.env"))
-POSTGRES_USER = config("POSTGRES_USER")
-POSTGRES_PASS = config("POSTGRES_PASS")
-POSTGRES_HOST = config("POSTGRES_HOST")
-POSTGRES_PORT = config("POSTGRES_PORT")
-POSTGRES_DB = config("POSTGRES_DB")
+POSTGRES_USER = config("POSTGRES__USER")
+POSTGRES_PASS = config("POSTGRES__PASS")
+POSTGRES_HOST = config("POSTGRES__HOST")
+POSTGRES_PORT = config("POSTGRES__PORT")
+POSTGRES_DB = config("POSTGRES__DB")
 
 
 def generate_data(base_path, test_file, shuffle=False):
@@ -26,7 +26,7 @@ def generate_data(base_path, test_file, shuffle=False):
     return imgs, labels
 
 
-def simulate_production_traffic(application_name="mnist_app", host=None, request_delay=1, request_amount=10000, file="test.npz", shuffle=False):
+def simulate_production_traffic(path="./", application_name="mnist_app", host=None, request_delay=1, request_amount=10000, file="test.npz", shuffle=False):
     conn = psycopg2.connect(f"postgresql://{POSTGRES_USER}:{POSTGRES_PASS}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}")
     cur = conn.cursor()
 
@@ -37,7 +37,6 @@ def simulate_production_traffic(application_name="mnist_app", host=None, request
     conn.commit()
 
     if not host:
-        # host = f"d4eeffac.serving.odsc.k8s.hydrosphere.io:9091"
         host = f"dev.k8s.hydrosphere.io"
     creds = grpc.ssl_channel_credentials()
     channel = grpc.secure_channel(host, creds)
@@ -55,7 +54,7 @@ def simulate_production_traffic(application_name="mnist_app", host=None, request
         hs.TensorShapeProto.Dim(size=1),
     ])
 
-    images, labels = generate_data('./', file, shuffle=shuffle)
+    images, labels = generate_data(path, file, shuffle=shuffle)
     for index, (image, label) in tqdm(enumerate(zip(images, labels)), total=request_amount):
         if index == request_amount: break
         if not image.flags['C_CONTIGUOUS']:
@@ -75,8 +74,4 @@ def simulate_production_traffic(application_name="mnist_app", host=None, request
 
 
 if __name__ == "__main__":
-    # parser = argparse.ArgumentParser()
-    # parser.add_argument('--hydrosphere-address', required=True)
-    
-    # args = parser.parse_args()
     simulate_production_traffic(request_delay=0.6, shuffle=True)

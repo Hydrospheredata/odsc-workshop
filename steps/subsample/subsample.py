@@ -11,11 +11,11 @@ from orchestrator import *
 
 config = Config(RepositoryEnv("config.env"))
 HYDROSPHERE_LINK = config('HYDROSPHERE_LINK')
-POSTGRES_HOST = config('POSTGRES_HOST')
-POSTGRES_PASS = config('POSTGRES_PASS')
-POSTGRES_USER = config('POSTGRES_USER')
-POSTGRES_PORT = config('POSTGRES_PORT')
-POSTGRES_DB = config('POSTGRES_DB')
+POSTGRES_HOST = config('POSTGRES__HOST')
+POSTGRES_PASS = config('POSTGRES__PASS')
+POSTGRES_USER = config('POSTGRES__USER')
+POSTGRES_PORT = config('POSTGRES__PORT')
+POSTGRES_DB = config('POSTGRES__DB')
 
 
 def get_model_version_id(host_address, application_name):
