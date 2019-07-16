@@ -199,7 +199,7 @@ if __name__ == "__main__":
     import kfp.compiler as compiler
     import subprocess, sys, argparse 
 
-    # Acquire parameters	
+    # Get parameters	
     parser = argparse.ArgumentParser()	
     parser.add_argument('--tag', 
         help="Which tag of image to use, when compiling pipeline", default="latest")
