@@ -1,31 +1,24 @@
 import os, time, requests, sys
 import numpy as np
 import argparse
-from decouple import Config, RepositoryEnv
-
-from storage import * 
+from cloud import CloudHelper
 
 
-config = Config(RepositoryEnv("config.env"))
-HYDROSPHERE_LINK = config('HYDROSPHERE_LINK')
-
-
-def main(data_path, acceptable_accuracy, application_name, bucket_name, storage_path="/"):
-
-    # Define helper classes
-    storage = Storage(bucket_name)
+def main(data_path, acceptable_accuracy, application_name, bucket_name):
+    cloud = CloudHelper().set_bucket(bucket_name)
+    config = cloud.get_kube_config_map()
 
     # Download testing data
-    storage.download_file(os.path.join(data_path, "test.npz"), os.path.join(storage_path, "test.npz"))
+    cloud.download_file(os.path.join(data_path, 'test.npz'), './')
     
     # Prepare data inputs
-    with np.load(os.path.join(storage_path, "test.npz")) as data:
+    with np.load("test.npz") as data:
         images = data["imgs"][:100]
         labels = data["labels"].astype(int)[:100]
     
     # Define variables 
     requests_delay = 0.2
-    service_link = f"{HYDROSPHERE_LINK}/gateway/application/{application_name}"
+    service_link = f"{config['uri.hydrosphere']}/gateway/application/{application_name}"
     print(f"Using URL :: {service_link}", flush=True)
 
     # Collect responses
@@ -39,21 +32,12 @@ def main(data_path, acceptable_accuracy, application_name, bucket_name, storage_
         time.sleep(requests_delay)
     
     accuracy = np.sum(labels == np.array(predicted)) / len(labels)
-    print(f"Achieved accuracy of {accuracy}", flush=True)
+    cloud.export_meta('integration-test-accuracy', accuracy)
 
+    print(f"Achieved accuracy of {accuracy}", flush=True)
     assert accuracy > acceptable_accuracy, \
         f"Accuracy is not acceptable ({accuracy} < {acceptable_accuracy})"
     
-
-def aws_lambda(event, context):
-    return main(
-        data_path=event["data_path"],
-        acceptable_accuracy=event["acceptable_accuracy"],
-        application_name=event["application_name"],
-        bucket_name=event["bucket_name"],
-        storage_path="/tmp/",
-    )
-
 
 if __name__ == "__main__": 
     parser = argparse.ArgumentParser()

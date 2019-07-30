@@ -1,16 +1,8 @@
-from PIL import Image
-import struct, numpy
-import os, gzip, tarfile, shutil, glob
+import os, gzip, tarfile, shutil, glob, struct
 import urllib, urllib.parse, urllib.request
-import datetime, argparse
-from decouple import Config, RepositoryEnv
-
-from storage import * 
-from orchestrator import *
-
-
-config = Config(RepositoryEnv("config.env"))
-MNIST_URL = config('MNIST_URL')
+import datetime, argparse, numpy
+from PIL import Image
+from cloud import CloudHelper
 
 
 filenames = [
@@ -21,7 +13,7 @@ filenames = [
 ]
 
 
-def download_files(base_url, storage_path, filenames=None):
+def download_files(base_url, filenames=None):
     """ Download required data """
 
     if not filenames: 
@@ -31,8 +23,7 @@ def download_files(base_url, storage_path, filenames=None):
     for file in filenames:
         print(f"Started downloading {file}", flush=True)
         download_url = urllib.parse.urljoin(base_url, file)
-        download_path = os.path.join(storage_path, file)
-        local_file, _ = urllib.request.urlretrieve(download_url, download_path)
+        local_file, _ = urllib.request.urlretrieve(download_url, file)
         unpack_archive(local_file)
 
 
@@ -45,18 +36,18 @@ def unpack_archive(file):
     os.remove(file)
 
 
-def process_images(dataset, storage_path):
+def process_images(dataset):
     """ Preprocess downloaded MNIST datasets """
     
     print(f"Processing images {dataset}", flush=True)
-    label_file = os.path.join(storage_path, dataset + '-labels-idx1-ubyte')
+    label_file = dataset + '-labels-idx1-ubyte'
     with open(label_file, 'rb') as file:
         _, num = struct.unpack(">II", file.read(8))
         labels = numpy.fromfile(file, dtype=numpy.int8) #int8
         new_labels = numpy.zeros((num, 10))
         new_labels[numpy.arange(num), labels] = 1
 
-    img_file = os.path.join(storage_path, dataset + '-images-idx3-ubyte')
+    img_file = dataset + '-images-idx3-ubyte'
     with open(img_file, 'rb') as file:
         _, num, rows, cols = struct.unpack(">IIII", file.read(16))
         imgs = numpy.fromfile(file, dtype=numpy.uint8).reshape(num, rows, cols)
@@ -66,58 +57,32 @@ def process_images(dataset, storage_path):
     return imgs, labels
 
 
-def download_mnist(base_url, storage_path):
-    """ Download and preprocess train/test datasets """
-
-    download_files(base_url, storage_path)
-    train_imgs, train_labels = process_images("train", storage_path)
-    test_imgs, test_labels = process_images("t10k", storage_path) 
-
-    train_path = os.path.join(storage_path, "train.npz")
-    test_path = os.path.join(storage_path, "test.npz")
-
-    numpy.savez_compressed(train_path, imgs=train_imgs, labels=train_labels)
-    numpy.savez_compressed(test_path, imgs=test_imgs, labels=test_labels)
-    return [train_path, test_path]
+def process_and_upload(data_set: str, upload_path: str, cloud: CloudHelper):
+    imgs, labels = process_images(data_set)
+    os.makedirs(data_set, exist_ok=True)
+    numpy.savez_compressed(os.path.join(data_set, "imgs.npz"), imgs=imgs)
+    numpy.savez_compressed(os.path.join(data_set, "labels.npz"), labels=labels)
+    cloud.upload_prefix(data_set, os.path.join(upload_path, data_set))
 
 
-def main(bucket_name, storage_path="/"):
-    
-    # Define helper classes
-    storage = Storage(bucket_name=bucket_name)
-    orchestrator = Orchestrator(storage_path=storage_path)
+def main(bucket_name):
+    """ Download MNIST data, process it and upload it to the cloud. """
 
-    # Define path, where to store files
+    cloud = CloudHelper(default_params={"uri.mnist": "http://yann.lecun.com/exdb/mnist/"}) \
+        .set_bucket(bucket_name)
+    mnist_uri = cloud.get_kube_config_map()["uri.mnist"]
     data_path = os.path.join("data", str(round(datetime.datetime.now().timestamp())))
-    
-    # Download and process MNIST files
-    processed_files = download_mnist(MNIST_URL, storage_path)
 
-    # Upload files to the cloud
-    for filename in processed_files:
-        source_path = os.path.join(storage_path, filename)
-        destination_path = os.path.join(data_path, os.path.basename(filename))
-        storage.upload_file(source_path, destination_path)
+    download_files(mnist_uri)
+    process_and_upload("train", data_path, cloud)
+    process_and_upload("t10k", data_path, cloud)
 
-    # Export parameters for orchestrator
-    orchestrator.export_meta(
-        "data_path", os.path.join(storage.full_name, data_path), "txt")
-
-
-def aws_lambda(event, context):
-    return main(
-        bucket_name=event["bucket_name"],
-        storage_path="/tmp",
-    )
+    cloud.export_meta("data_path", os.path.join(cloud.bucket_name_uri, data_path))
 
 
 if __name__ == "__main__": 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--storage-path', default='/')
     parser.add_argument('--bucket-name', required=True)
 
     args = parser.parse_args()
-    main(
-        storage_path=args.storage_path,
-        bucket_name=args.bucket_name,
-    )
+    main(bucket_name=args.bucket_name)

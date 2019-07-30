@@ -1,16 +1,6 @@
-import os, argparse
-import shutil, urllib, datetime
-import numpy as np
-import tensorflow as tf
-import mlflow
-from decouple import Config, RepositoryEnv
-
-from storage import *
-from orchestrator import *
-
-
-config = Config(RepositoryEnv("config.env"))
-MLFLOW_LINK = config("MLFLOW_LINK")
+import os, argparse, shutil, urllib, datetime
+import numpy as np, tensorflow as tf, mlflow
+from cloud import CloudHelper
 
 
 def encoder(x, weights, biases):
@@ -25,23 +15,23 @@ def decoder(x, weights, biases):
     return layer_2
 
 
-def main(data_path, learning_rate, steps, batch_size, model_name, bucket_name, storage_path="/"): 
+def main(data_path, learning_rate, steps, batch_size, model_name, bucket_name): 
+    """ Train pure Tensorflow Autoencoder and upload it to the cloud. """
 
-    # Define helper classes
-    storage = Storage(bucket_name)
-    orchestrator = Orchestrator(storage_path=storage_path)
+    cloud = CloudHelper().set_bucket(bucket_name)
 
     # Set up environment and variables
     model_path = os.path.join("model", "mnist-drift-detector", str(round(datetime.datetime.now().timestamp())))
+    mlflow_uri = cloud.get_kube_config_map()["uri.mlflow"]
 
     # Log params into Mlflow
-    mlflow.set_tracking_uri(MLFLOW_LINK)
-    mlflow.set_experiment(f'Default.{model_name}')  # Example usage
+    mlflow.set_tracking_uri(mlflow_uri)
+    mlflow.set_experiment(f'default.{model_name}')  # Example usage
     mlflow.log_params({
         "data_path": data_path,
         "learning_rate": learning_rate,
         "batch_size": batch_size,
-        "steps": steps
+        "steps": steps,
     })
 
     # Define network parameters
@@ -63,8 +53,7 @@ def main(data_path, learning_rate, steps, batch_size, model_name, bucket_name, s
     }
     
     # Download training/testing data
-    storage.download_file(os.path.join(data_path, "train.npz"), "./train.npz")
-    storage.download_file(os.path.join(data_path, "test.npz"), "./test.npz")
+    cloud.download_prefix(data_path, "./")
 
     # Prepare data inputs
     with np.load("./train.npz") as data:
@@ -107,11 +96,12 @@ def main(data_path, learning_rate, steps, batch_size, model_name, bucket_name, s
         for i in range(1, steps+1):
             batch = sess.run(next_element)[0]
             _, l = sess.run([optimizer, loss], feed_dict={imgs_placeholder: batch})
-
-            if i % 10 == 0:
-                mlflow.log_metric("loss", np.mean(l))
-            if i % 500 == 0 or i == 1:
-                print(f'Step {i}: Minibatch Loss: {np.mean(l)}', flush=True)
+            
+            try: 
+                if i % 10 == 0: mlflow.log_metric("loss", np.mean(l))
+                if i % 500 == 0 or i == 1: print(f'Step {i}: Loss: {np.mean(l)}', flush=True)
+            except: 
+                continue
 
         # Save model
         signature_map = {
@@ -135,11 +125,8 @@ def main(data_path, learning_rate, steps, batch_size, model_name, bucket_name, s
         builder.save()
 
     # Upload files to the cloud
-    for root, dirs, files in os.walk(model_path):
-        for file in files:
-            source_path = os.path.join(root, file)
-            storage.upload_file(source_path, source_path)
-
+    cloud.upload_prefix(model_path, model_path)
+    
     # Export metadata to the orchestrator
     metrics = {
         'metrics': [
@@ -151,16 +138,18 @@ def main(data_path, learning_rate, steps, batch_size, model_name, bucket_name, s
         ],
     }
 
-    mlflow.log_param("model_path", os.path.join(storage.full_name, model_path))
-    
-    run = mlflow.active_run()
-    mlflow_link = f"{MLFLOW_LINK}/#/experiments/{run.info.experiment_id}/runs/{run.info.run_id}"
+    mlflow.log_param("model_path", os.path.join(cloud.bucket_name_uri, final_dir))
 
-    orchestrator.export_meta("mlpipeline-metrics", metrics, "json")
-    orchestrator.export_meta("model_path", os.path.join(storage.full_name, model_path), "txt")
-    orchestrator.export_meta("loss", np.mean(l), "txt")
-    orchestrator.export_meta("classes", num_classes, "txt")
-    orchestrator.export_meta("mlflow_link", mlflow_link, "txt")
+    run = mlflow.active_run()
+    mlflow_run_uri = f"{mlflow_uri}/#/experiments/{run.info.experiment_id}/runs/{run.info.run_id}"
+
+    cloud.export_meta("mlpipeline-metrics", metrics, "json") 
+    cloud.export_metas({
+        "model_path": os.path.join(cloud.bucket_name_uri, model_path),
+        "loss": np.mean(l),
+        "classes": num_classes,
+        "mlflow_run_uri": mlflow_run_uri,
+    })
 
 
 if __name__ == "__main__": 

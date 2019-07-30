@@ -1,32 +1,17 @@
-import argparse
-import os, urllib.parse
+import argparse, os, urllib.parse
 from hydrosdk import sdk
-from decouple import Config, RepositoryEnv
-
-from storage import *
-from orchestrator import * 
+from cloud import CloudHelper
 
 
-config = Config(RepositoryEnv("config.env"))
-TENSORFLOW_RUNTIME = config('TENSORFLOW_RUNTIME')
-HYDROSPHERE_LINK = config('HYDROSPHERE_LINK')
-
-
-def main(drift_detector_app, model_name, classes, bucket_name, storage_path="/", **kwargs):
+def main(drift_detector_app, model_name, classes, bucket_name, **kwargs):
     
-    storage = Storage(bucket_name)
-    orchestrator = Orchestrator(storage_path=storage_path)
+    cloud = CloudHelper().set_bucket(bucket_name)
+    config = cloud.get_kube_config_map()
 
     # Download model 
-    working_dir = os.path.join(storage_path, "model")
-    storage.download_prefix(os.path.join(kwargs["model_path"], "saved_model"), working_dir)
+    cloud.download_prefix(os.path.join(kwargs["model_path"], "saved_model"), "./")
 
     # Build servable
-    payload = [
-        os.path.join(storage_path, 'model', 'saved_model.pb'),
-        os.path.join(storage_path, 'model', 'variables')
-    ]
-
     metadata = {
         'learning_rate': kwargs["learning_rate"],
         'batch_size': kwargs["batch_size"],
@@ -35,17 +20,10 @@ def main(drift_detector_app, model_name, classes, bucket_name, storage_path="/",
         'average_loss': kwargs["average_loss"],
         'loss': kwargs["loss"],
         'global_step': kwargs["global_step"],
-        'mlflow_link': kwargs["mlflow_link"], 
+        'mlflow_run_uri': kwargs["mlflow_run_uri"], 
         'data': kwargs["data_path"],
         'model_path': kwargs["model_path"],
     }
-
-    signature = sdk.Signature('predict') \
-        .with_input('imgs', 'float32', [-1, 28, 28, 1], 'image') \
-        .with_output('probabilities', 'float32', [-1, classes]) \
-        .with_output('class_ids', 'int64', [-1, 1]) \
-        .with_output('logits', 'float32', [-1, classes]) \
-        .with_output('classes', 'string', [-1, 1])
 
     monitoring = [
         sdk.Monitoring('Requests').with_spec('CounterMetricSpec', interval=15),
@@ -61,38 +39,18 @@ def main(drift_detector_app, model_name, classes, bucket_name, storage_path="/",
     ]
 
     model = sdk.Model() \
-        .with_name(model_name) \
-        .with_runtime(TENSORFLOW_RUNTIME) \
+        .with_payload(os.listdir()) \
+        .with_runtime(config["default.tensorflow_runtime"]) \
         .with_metadata(metadata) \
-        .with_payload(payload) \
-        .with_signature(signature) \
-        .with_monitoring(monitoring)
+        .with_monitoring(monitoring) \
+        .with_name(model_name)
 
-    result = model.apply(HYDROSPHERE_LINK)
-    print(result)
-
-    orchestrator.export_meta("model_version", result["modelVersion"], "txt")
-    orchestrator.export_meta("model_link", urllib.parse.urljoin(
-        HYDROSPHERE_LINK, f"/models/{result['model']['id']}/{result['id']}/details"), "txt")
-
-def aws_lambda(event, context):
-    return main(
-        drift_detector_app=event["drift_detector_app"],
-        model_name=event["model_name"],
-        classes=event["classes"],
-        bucket_name=event["bucket_name"],
-        data_path=event["data_path"],
-        model_path=event["model_path"],
-        accuracy=event["accuracy"],
-        average_loss=event["average_loss"],
-        loss=event["loss"],
-        learning_rate=event["learning_rate"],
-        batch_size=event["batch_size"],
-        epochs=event["epochs"],
-        global_step=event["global_step"],
-        mlflow_link=event["mlflow_link"],
-        storage_path="/tmp/",
-    )
+    result = model.apply(config["uri.hydrosphere"])
+    cloud.export_metas({
+        "model_version": result["modelVersion"],
+        "model_uri": urllib.parse.urljoin(
+            config["uri.hydrosphere"], f"/models/{result['model']['id']}/{result['id']}/details")
+    })
 
 
 if __name__ == "__main__": 
@@ -112,7 +70,7 @@ if __name__ == "__main__":
     parser.add_argument('--batch-size', required=True)
     parser.add_argument('--epochs', required=True)
     parser.add_argument('--global-step', required=True)
-    parser.add_argument('--mlflow-link', required=True)
+    parser.add_argument('--mlflow-run-uri', required=True)
     
     args = parser.parse_args()
     main(
@@ -129,5 +87,5 @@ if __name__ == "__main__":
         batch_size=args.batch_size,
         epochs=args.epochs,
         global_step=args.global_step,
-        mlflow_link=args.mlflow_link,
+        mlflow_run_uri=args.mlflow_run_uri,
     )
