@@ -27,5 +27,5 @@ except:
 
 
 # Submit a pipeline run
-result = client.run_pipeline(experiment_id, run_name, args.file)
+result = client.run_pipeline(experiment_id, run_name, args.file, )
 print(result)
