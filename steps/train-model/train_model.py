@@ -91,7 +91,7 @@ def main(data_path, model_path, learning_rate, batch_size, epochs, *args, **kwar
         Amount of epochs, during which the model will be trained. 
     """
     tf.logging.set_verbosity(tf.logging.INFO)
-    
+
     # Prepare data inputs
     with np.load(os.path.join(data_path, "train", "imgs.npz")) as np_imgs:
         train_imgs = np_imgs["imgs"]
@@ -129,10 +129,8 @@ def main(data_path, model_path, learning_rate, batch_size, epochs, *args, **kwar
         model_path, serving_input_receiver_fn).decode()
     _prettify_folder_structure(model_path, saved_model_path)
 
-    return {
-        "accuracy": evaluation["accuracy"].item(),
-        "num_classes": num_classes,
-    }
+    evaluation.update({"num_classes": num_classes})
+    return evaluation
 
 
 if __name__ == "__main__":
@@ -177,9 +175,14 @@ if __name__ == "__main__":
         "mlpipeline-metrics.json": {       # mlpipeline-metrics.json lets us enrich Kubeflow UI
             "metrics": [
                 {
-                    "name": "model-accuracy",
-                    "numberValue": result["accuracy"],
+                    "name": "accuracy",
+                    "numberValue": result["accuracy"].item(),
                     "format": "PERCENTAGE"
+                },
+                {
+                    "name": "loss",
+                    "numberValue": result["average_loss"].item(),
+                    "format": "RAW"
                 }
             ]
         },

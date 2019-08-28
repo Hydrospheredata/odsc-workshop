@@ -5,7 +5,7 @@ from collections import namedtuple
 __all__ = ["CloudHelper"]
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 console_handler = logging.StreamHandler(sys.stdout)
 console_handler.setLevel(logging.INFO)

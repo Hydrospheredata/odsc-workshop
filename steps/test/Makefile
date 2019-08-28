@@ -1,4 +1,4 @@
-IMAGE_NAME = mnist-pipeline-train-model
+IMAGE_NAME = mnist-pipeline-test
 DOCKER_REGISTRY ?= hydrosphere
 TAG ?= latest
 
@@ -12,14 +12,11 @@ prepare:
 
 test-local: prepare
 	@echo Performing local run
-	python3 train_model.py \
+	python3 test.py \
 		--data-path s3://workshop-hydrosphere/mnist/data/sample-version=13e4e7f62eb6ac60e44c2094a6cd86b7/ \
-		--model-path s3://workshop-hydrosphere/mnist/model/ \
-		--model-name mnist \
-		--learning-rate 0.01 \
-		--batch-size 64 \
-		--epochs 5 \
-		--dev 
+    	--acceptable-accuracy 0.90 \
+    	--application-name kubeflow-mnist-stage-app \
+		--dev
 
 # DOCKER_BUILD_OPTS env var can be used to configure build step
 build-container:
@@ -31,12 +28,9 @@ test-container:
 	docker run -v ~/.aws:/root/.aws \
 		$(DOCKER_REGISTRY)/$(IMAGE_NAME):$(TAG) \
 		--data-path s3://workshop-hydrosphere/mnist/data/sample-version=13e4e7f62eb6ac60e44c2094a6cd86b7/ \
-		--model-path s3://workshop-hydrosphere/mnist/model/ \
-		--model-name mnist \
-		--learning-rate 0.01 \
-		--batch-size 64 \
-		--epochs 5 \
-		--dev 
+    	--acceptable-accuracy 0.90 \
+    	--application-name mnist_stage_app \
+		--dev
 
 push-container: 
 	@echo Pushing image to the registry
@@ -44,5 +38,4 @@ push-container:
 
 clean:
 	@echo Cleaning folder
-	rm -rf mnist cloud.py *.log logs_path num_classes model_path mlpipeline-metrics.json \
-		mlpipeline-ui-metadata.json accuracy loss global_step average_loss
+	rm -rf data cloud.py *.log integration_test_accuracy

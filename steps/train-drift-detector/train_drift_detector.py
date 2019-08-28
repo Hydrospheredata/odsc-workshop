@@ -72,8 +72,12 @@ def main(data_path, model_path, learning_rate, batch_size, steps, *args, **kwarg
     # Prepare data inputs
     with np.load(os.path.join(data_path, "train", "imgs.npz")) as data:
         train_imgs = data["imgs"]
+    with np.load(os.path.join(data_path, "train", "labels.npz")) as data:
+        train_labels = data["labels"]
     with np.load(os.path.join(data_path, "t10k", "imgs.npz")) as data:
         test_imgs = data["imgs"]
+    with np.load(os.path.join(data_path, "t10k", "labels.npz")) as data:
+        test_labels = data["labels"]
 
     imgs = np.expand_dims(np.vstack([train_imgs, test_imgs]), axis=-1)
     labels = np.hstack([train_labels, test_labels])
@@ -180,7 +184,7 @@ if __name__ == "__main__":
         "mlpipeline-metrics.json": {       # mlpipeline-metrics.json lets us enrich Kubeflow UI
             "metrics": [
                 {
-                    "name": "drift-detector-loss",
+                    "name": "loss",
                     "numberValue": result["loss"],
                     "format": "RAW"
                 }

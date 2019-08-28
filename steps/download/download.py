@@ -6,21 +6,10 @@ from PIL import Image
 from cloud import CloudHelper
 
 
+logging.basicConfig(level=logging.INFO, 
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout), logging.FileHandler("download.log")])
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-
-formatter = logging.Formatter(
-    '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-
-console_handler = logging.StreamHandler(sys.stdout)
-console_handler.setLevel(logging.INFO)
-console_handler.setFormatter(formatter)
-logger.addHandler(console_handler)
-
-file_handler = logging.FileHandler("download.log")
-file_handler.setLevel(logging.INFO)
-file_handler.setFormatter(formatter)
-logger.addHandler(file_handler)
 
 
 filenames = [
@@ -106,7 +95,9 @@ def main(uri):
     imgs, labels = process_images("t10k")
     test_md5 = write_data(imgs, labels, "data/t10k")
 
-    return hashlib.md5((train_md5 + test_md5).encode("utf-8")).hexdigest()
+    return {
+        "sample_version": CloudHelper._md5_string(train_md5 + test_md5)
+    }
 
 
 if __name__ == "__main__": 
@@ -115,13 +106,39 @@ if __name__ == "__main__":
     parser.add_argument("--dev", action="store_true", default=False)
     args = parser.parse_args()
 
-    cloud = CloudHelper(default_config_map_params={"uri.mnist": "http://yann.lecun.com/exdb/mnist/"})
-    sample_version = main(uri=cloud.get_kube_config_map()["uri.mnist"])
-    output_data_path = os.path.join(args.output_data_path, f"sample-version={sample_version}")
-    cloud.upload_prefix("data", output_data_path)
-    cloud.log_execution(
-        outputs={"output_data_path": output_data_path}, 
-        logs_file="download.log",
-        logs_bucket=cloud.get_bucket_from_uri(args.output_data_path).full_uri,
-        dev=args.dev,
+    cloud = CloudHelper(
+        default_logs_path="mnist/logs",
+        default_config_map_params={
+            "uri.mnist": "http://yann.lecun.com/exdb/mnist/",
+        },
     )
+    config = cloud.get_kube_config_map()
+    args, unknown = parser.parse_known_args()
+    if unknown: 
+        logger.warning(f"Parsed unknown args: {unknown}")
+    
+    try:
+
+        # Initialize runtime variables
+        pass 
+
+        # Execute main script
+        result = main(uri=cloud.get_kube_config_map()["uri.mnist"])
+        output_data_path = os.path.join(
+            args.output_data_path, f"sample-version={result['sample_version']}")
+
+        # Prepare variables for logging
+        pass 
+        
+    except Exception as e:
+        logger.exception("Main execution script failed.")
+    
+    finally: 
+        cloud.log_execution(
+            outputs={
+                "output_data_path": output_data_path,
+            },
+            logs_bucket=cloud.get_bucket_from_uri(args.output_data_path).full_uri,
+            logs_file="download.log",
+            dev=args.dev,
+        )

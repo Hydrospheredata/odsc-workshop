@@ -1,9 +1,10 @@
-DOCKER_REGISTRY = hydrosphere
 IMAGE_NAME = mnist-pipeline-train-drift-detector
-TAG = latest
+DOCKER_REGISTRY ?= hydrosphere
+TAG ?= latest
 
 all: prepare test-local prepare build-container clean test-container push-container
 release: prepare build-container clean test-container push-container
+release-raw: prepare build-container clean push-container
 
 prepare:
 	@echo Copying local dependencies

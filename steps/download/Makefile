@@ -1,9 +1,10 @@
-DOCKER_REGISTRY = hydrosphere
 IMAGE_NAME = mnist-pipeline-download
-TAG = latest
+DOCKER_REGISTRY ?= hydrosphere
+TAG ?= latest
 
 all: prepare test-local prepare build-container clean test-container push-container
 release: prepare build-container clean test-container push-container
+release-raw: prepare build-container clean push-container
 
 prepare:
 	@echo Copying local dependencies
@@ -11,7 +12,9 @@ prepare:
 
 test-local: prepare
 	@echo Performing local run
-	python3 download.py --output-data-path s3://workshop-hydrosphere/mnist/data --dev
+	python3 download.py \
+		--output-data-path s3://workshop-hydrosphere/mnist/data \
+		--dev
 
 # DOCKER_BUILD_OPTS env var can be used to configure build step
 build-container:
@@ -22,7 +25,7 @@ test-container:
 	@echo Performing container run
 	docker run -v ~/.aws:/root/.aws \
 		$(DOCKER_REGISTRY)/$(IMAGE_NAME):$(TAG) \
-		--output-data-path s3://workshop-hydrosphere/mnist/data
+		--output-data-path s3://workshop-hydrosphere/mnist/data \
 		--dev
 
 push-container: 

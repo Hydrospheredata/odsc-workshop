@@ -31,6 +31,7 @@ def use_config_map(name, mount_path="/etc/config"):
         "uri.mnist",
         "uri.mlflow",
         "uri.hydrosphere",
+        "uri.reqstore",
         "default.tensorflow_runtime",
     ]
 
@@ -53,22 +54,34 @@ def apply_config_map_and_aws_secret(op):
 
 @dsl.pipeline(name="MNIST", description="MNIST Workflow Example")
 def pipeline_definition(
-    model_learning_rate="0.01",
-    model_epochs="10",
-    model_batch_size="256",
-    drift_detector_learning_rate="0.01",
-    drift_detector_steps="3600",
-    drift_detector_batch_size="256",
+    target_application_name="kubeflow-mnist-app",
+    sample_limit="10000",
+    train_part="0.7",
+    validation_part="0.1",
+    model_learning_rate="0.005",
+    model_epochs="50",
+    model_batch_size="128",
+    drift_detector_learning_rate="0.005",
+    drift_detector_steps="5400",
+    drift_detector_batch_size="128",
     model_drift_detector_name="kubeflow-mnist-drift-detector",
     model_name="kubeflow-mnist",
-    acceptable_accuracy="0.90",
-    test_sample_size="100",
+    acceptable_accuracy="0.80",
+    test_sample_size="200",
 ):
     """ 
     Pipeline describes structure in which steps should be executed. 
     
     Parameters
     ----------
+    target_application_name: str
+
+    sample_limit: str
+
+    train_part: str
+
+    validation_part: str
+
     model_learning_rate: str
         Learning rate, used for training a classifier.
     model_epochs: str
@@ -94,14 +107,20 @@ def pipeline_definition(
     # Configure all steps to have ConfigMap and use aws secret
     dsl.get_pipeline_conf().add_op_transformer(apply_config_map_and_aws_secret)
 
-    download = dsl.ContainerOp(
-        name="download",
-        image=f"{registry}/mnist-pipeline-download:{tag}",
+    subsample = dsl.ContainerOp(
+        name="subsample",
+        image=f"{registry}/mnist-pipeline-subsample:{tag}",
         file_outputs={
             "output_data_path": "/output_data_path",
             "logs_path": "/logs_path",
         },
-        arguments=["--output-data-path", "s3://workshop-hydrosphere/mnist/data"],
+        arguments=[
+            "--output-data-path", "s3://workshop-hydrosphere/mnist/data",
+            "--application-name", target_application_name,
+            "--limit", sample_limit,
+            "--train-part", train_part, 
+            "--validation-part", validation_part
+        ],
     )
 
     train_drift_detector = dsl.ContainerOp(
@@ -113,7 +132,7 @@ def pipeline_definition(
             "loss": "/loss",
         },
         arguments=[
-            "--data-path", download.outputs["output_data_path"],
+            "--data-path", subsample.outputs["output_data_path"],
             "--model-path", "s3://workshop-hydrosphere/mnist/model",
             "--model-name", model_drift_detector_name,
             "--learning-rate", drift_detector_learning_rate,
@@ -135,7 +154,7 @@ def pipeline_definition(
             "loss": "/loss",
         },
         arguments=[
-            "--data-path", download.outputs["output_data_path"],
+            "--data-path", subsample.outputs["output_data_path"],
             "--model-path", "s3://workshop-hydrosphere/mnist/model",
             "--model-name", model_name,
             "--learning-rate", model_learning_rate,
@@ -152,7 +171,7 @@ def pipeline_definition(
             "model_uri": "/model_uri"
         },
         arguments=[
-            "--data-path", download.outputs["output_data_path"],
+            "--data-path", subsample.outputs["output_data_path"],
             "--model-path", train_drift_detector.outputs["model_path"],
             "--model-name", model_drift_detector_name,
             "--learning-rate", drift_detector_learning_rate,
@@ -170,9 +189,9 @@ def pipeline_definition(
             "application_uri": "/application_uri"
         },
         arguments=[
-            "--data-path", download.outputs["output_data_path"],
+            "--data-path", subsample.outputs["output_data_path"],
             "--model-version", release_drift_detector.outputs["model_version"],
-            "--application-name-postfix=-app", 
+            '--application-name-postfix=-app', 
             "--model-name", model_drift_detector_name,
         ],
     )
@@ -187,7 +206,7 @@ def pipeline_definition(
         arguments=[
             "--drift-detector-app", deploy_drift_detector_to_prod.outputs["application_name"],
             "--model-name", model_name,
-            "--data-path", download.outputs["output_data_path"],
+            "--data-path", subsample.outputs["output_data_path"],
             "--model-path", train_model.outputs["model_path"],
             "--accuracy", train_model.outputs["accuracy"],
             "--average-loss", train_model.outputs["average_loss"],
@@ -207,9 +226,9 @@ def pipeline_definition(
             "application_uri": "/application_uri"
         },
         arguments=[
-            "--data-path", download.outputs["output_data_path"],
+            "--data-path", subsample.outputs["output_data_path"],
             "--model-version", release_model.outputs["model_version"],
-            "--application-name-postfix=-stage-app", 
+            '--application-name-postfix=-stage-app',  
             "--model-name", model_name,
         ],
     )
@@ -221,7 +240,7 @@ def pipeline_definition(
             "integration_test_accuracy": "/integration_test_accuracy",
         },
         arguments=[
-            "--data-path", download.outputs["output_data_path"],
+            "--data-path", subsample.outputs["output_data_path"],
             "--application-name", deploy_model_to_stage.outputs["application_name"], 
             "--acceptable-accuracy", acceptable_accuracy,
             "--sample-size", test_sample_size,
@@ -236,9 +255,9 @@ def pipeline_definition(
             "application_uri": "/application_uri"
         },
         arguments=[
-            "--data-path", download.outputs["output_data_path"],
+            "--data-path", subsample.outputs["output_data_path"],
             "--model-version", release_model.outputs["model_version"],
-            "--application-name-postfix=-app", 
+            '--application-name-postfix=-app', 
             "--model-name", model_name,
         ],
     ).after(test_model)
@@ -247,7 +266,7 @@ def pipeline_definition(
         name="write_output",
         image=f"{registry}/mnist-pipeline-output:{tag}", 
         arguments=[
-            '--data-path', download.outputs["output_data_path"],
+            '--data-path', subsample.outputs["output_data_path"],
             '--model-artifacts-path', train_model.outputs["model_path"], 
             '--drift-detector-artifacts-path', train_drift_detector.outputs["model_path"],
             '--model-uri', release_model.outputs["model_uri"],
@@ -265,13 +284,13 @@ if __name__ == "__main__":
 
     # Get parameters	
     parser = argparse.ArgumentParser()	
-    parser.add_argument('-t', '--tag', 
-        help="Which tag of image to use, when compiling pipeline", default="v1")
-    parser.add_argument('-r', '--registry', 
+    parser.add_argument('--tag', 
+        help="Which tag of image to use, when compiling pipeline", default="latest")
+    parser.add_argument('--registry', 
         help="Which docker registry to use, when compiling pipeline", default="hydrosphere")
     args = parser.parse_args()
     
     tag = args.tag
     registry = args.registry
     # Compile pipeline
-    compiler.Compiler().compile(pipeline_definition, "origin.tar.gz")
+    compiler.Compiler().compile(pipeline_definition, "subsample.tar.gz")
