@@ -3,7 +3,7 @@ import shutil, glob, struct, hashlib
 import urllib, urllib.parse, urllib.request
 import datetime, argparse, numpy
 from PIL import Image
-from cloud import CloudHelper
+import wo
 
 
 logging.basicConfig(level=logging.INFO, 
@@ -96,7 +96,7 @@ def main(uri):
     test_md5 = write_data(imgs, labels, "data/t10k")
 
     return {
-        "sample_version": CloudHelper._md5_string(train_md5 + test_md5)
+        "sample_version": wo.utils.io.md5_string(train_md5 + test_md5)
     }
 
 
@@ -104,18 +104,18 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-data-path", required=True)
     parser.add_argument("--dev", action="store_true", default=False)
-    args = parser.parse_args()
-
-    cloud = CloudHelper(
-        default_logs_path="mnist/logs",
-        default_config_map_params={
-            "uri.mnist": "http://yann.lecun.com/exdb/mnist/",
-        },
-    )
-    config = cloud.get_kube_config_map()
     args, unknown = parser.parse_known_args()
     if unknown: 
         logger.warning(f"Parsed unknown args: {unknown}")
+
+    w = wo.Orchestrator(
+        is_dev=args.dev,
+        default_logs_path="mnist/logs",
+        default_params={
+            "uri.mnist": "http://yann.lecun.com/exdb/mnist/"
+        },
+    )
+    config = w.get_config()
     
     try:
 
@@ -123,7 +123,7 @@ if __name__ == "__main__":
         pass 
 
         # Execute main script
-        result = main(uri=cloud.get_kube_config_map()["uri.mnist"])
+        result = main(uri=config["uri.mnist"])
         output_data_path = os.path.join(
             args.output_data_path, f"sample-version={result['sample_version']}")
 
@@ -134,11 +134,11 @@ if __name__ == "__main__":
         logger.exception("Main execution script failed.")
     
     finally: 
-        cloud.log_execution(
+        scheme, bucket, path = w._parse_uri(args.output_data_path)
+        w.log_execution(
             outputs={
                 "output_data_path": output_data_path,
             },
-            logs_bucket=cloud.get_bucket_from_uri(args.output_data_path).full_uri,
+            logs_bucket=f"{scheme}://{bucket}",
             logs_file="download.log",
-            dev=args.dev,
         )

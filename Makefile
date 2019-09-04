@@ -19,7 +19,7 @@ submit-subsample:
 	python3 utils/kubeflow.py -f subsample.tar.gz -e "$(EXPERIMENT)" -k $(KUBEFLOW)  
 
 release-all-steps:
-	@for path in download train-drift-detector train-model release-drift-detector release-model deploy test; do \
+	@for path in download train-drift-detector train-model release-drift-detector release-model deploy output test; do \
 		cd steps/$$path && make release; \
 		cd ../../; \
 	done

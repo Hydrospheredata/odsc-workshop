@@ -1,6 +1,6 @@
 import argparse, os, urllib.parse, logging, sys, pprint
 from hydrosdk import sdk
-from cloud import CloudHelper
+import wo
 
 
 logging.basicConfig(level=logging.INFO, 
@@ -56,16 +56,22 @@ if __name__ == "__main__":
     parser.add_argument('--loss', required=True)
     parser.add_argument('--global-step', required=True)
     parser.add_argument('--dev', action="store_true", default=False)
-    args = parser.parse_args()
+    args, unknown = parser.parse_known_args()
+    if unknown: 
+        logger.warning(f"Parsed unknown args: {unknown}")
     kwargs = dict(vars(args))
 
     # Prepare environment
-    cloud = CloudHelper(default_config_map_params={
-        "default.tensorflow_runtime": "hydrosphere/serving-runtime-tensorflow-1.13.1:dev", 
-        "uri.hydrosphere": "https://dev.k8s.hydrosphere.io"
-    })
-    config = cloud.get_kube_config_map()
-    cloud.download_prefix(os.path.join(args.model_path, "saved_model"), args.model_path) 
+    w = wo.Orchestrator(
+        default_params={
+            "default.tensorflow_runtime": "hydrosphere/serving-runtime-tensorflow-1.13.1:dev",
+            "uri.hydrosphere": "https://dev.k8s.hydrosphere.io",
+        },
+        default_logs_path="mnist/logs",
+        is_dev=args.dev
+    )
+    config = w.get_config()
+    w.download_prefix(os.path.join(args.model_path, "saved_model"), args.model_path) 
 
     # Prepare deployment essentials
     dev = kwargs.pop("dev")
@@ -73,8 +79,8 @@ if __name__ == "__main__":
     drift_detector_app = kwargs.pop("drift_detector_app")
     runtime = config["default.tensorflow_runtime"]
     hydrosphere_uri = config["uri.hydrosphere"]
-    model_path = cloud.get_relative_path_from_uri(args.model_path)
-    payload = list(map(lambda a: os.path.join(model_path, a), os.listdir(model_path)))
+    scheme, bucket, path = w._parse_uri(args.model_path)
+    payload = list(map(lambda a: os.path.join(path, a), os.listdir(path)))
 
     # Release the model
     result = main(drift_detector_app, model_name, runtime, payload, kwargs, hydrosphere_uri)
@@ -83,11 +89,9 @@ if __name__ == "__main__":
     kwargs["model_version"] = result["modelVersion"]
     kwargs["model_uri"] =  urllib.parse.urljoin(
         config["uri.hydrosphere"], f"/models/{result['model']['id']}/{result['id']}/details")
-    cloud.log_execution(
-        outputs=kwargs, 
-        logs_bucket=cloud.get_bucket_from_uri(args.model_path).full_uri,
+    w.log_execution(
+        outputs=kwargs,
+        logs_bucket=f"{scheme}://{bucket}",
         logs_file="release_model.log",
-        logs_path="mnist/logs",
-        dev=dev,
     )
      
