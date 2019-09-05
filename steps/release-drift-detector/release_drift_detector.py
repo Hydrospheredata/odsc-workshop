@@ -1,13 +1,13 @@
-import argparse, logging, sys
-import os, urllib.parse, pprint
-from hydrosdk import sdk
-import wo 
-
+import logging, sys
 
 logging.basicConfig(level=logging.INFO, 
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout), logging.FileHandler("release_drift_detector.log")])
+    handlers=[logging.StreamHandler(sys.stdout), logging.FileHandler("release-drift-detector.log")])
 logger = logging.getLogger(__name__)
+
+import argparse, wo
+import os, urllib.parse, pprint
+from hydrosdk import sdk
 
 
 def main(model_name, runtime, payload, metadata, hydrosphere_uri):
@@ -42,35 +42,46 @@ if __name__ == "__main__":
         logger.warning(f"Parsed unknown args: {unknown}")
     kwargs = dict(vars(args))
 
-    # Prepare environment
     w = wo.Orchestrator(
+        default_logs_path="mnist/logs",
         default_params={
             "default.tensorflow_runtime": "hydrosphere/serving-runtime-tensorflow-1.13.1:dev",
             "uri.hydrosphere": "https://dev.k8s.hydrosphere.io",
         },
-        default_logs_path="mnist/logs",
-        is_dev=args.dev
+        dev=args.dev,
     )
     config = w.get_config()
-    w.download_prefix(args.model_path, args.model_path) 
+    
+    try:
 
-    # Prepare deployment essentials
-    dev = kwargs.pop("dev")
-    model_name = kwargs.pop("model_name")
-    runtime = config["default.tensorflow_runtime"]
-    hydrosphere_uri = config["uri.hydrosphere"]
-    scheme, bucket, path = w._parse_uri(args.model_path)
-    payload = list(map(lambda a: os.path.join(path, a), os.listdir(path)))
+        # Download artifacts
+        w.download_prefix(args.model_path, args.model_path)
 
-    # Release the model
-    result = main(model_name, runtime, payload, kwargs, hydrosphere_uri)
+        # Initialize runtime variables
+        dev = kwargs.pop("dev")
+        model_name = kwargs.pop("model_name")
+        runtime = config["default.tensorflow_runtime"]
+        hydrosphere_uri = config["uri.hydrosphere"]
+        scheme, bucket, path = w.parse_uri(args.model_path)
+        payload = list(map(lambda a: os.path.join(path, a), os.listdir(path)))
 
-    # Export metadata
-    kwargs["model_version"] = result["modelVersion"]
-    kwargs["model_uri"] =  urllib.parse.urljoin(
-        config["uri.hydrosphere"], f"/models/{result['model']['id']}/{result['id']}/details")
-    w.log_execution(
-        outputs=kwargs,
-        logs_bucket=f"{scheme}://{bucket}",
-        logs_file="release_drift_detector.log",
-    )
+        # Execute main script
+        result = main(model_name, runtime, payload, kwargs, hydrosphere_uri)
+
+        # Prepare variables for logging
+        kwargs["model_version"] = result["modelVersion"]
+        kwargs["model_uri"] =  urllib.parse.urljoin(
+            config["uri.hydrosphere"], f"/models/{result['model']['id']}/{result['id']}/details")
+        
+        # Upload artifacts 
+        pass
+        
+    except Exception as e:
+        logger.exception("Main execution script failed")
+    
+    finally: 
+        w.log_execution(
+            outputs=kwargs,
+            logs_bucket=f"{scheme}://{bucket}",
+            logs_file="release-drift-detector.log",
+        )

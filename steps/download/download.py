@@ -1,15 +1,15 @@
-import os, sys, gzip, tarfile, logging
-import shutil, glob, struct, hashlib
-import urllib, urllib.parse, urllib.request
-import datetime, argparse, numpy
-from PIL import Image
-import wo
-
+import logging, sys
 
 logging.basicConfig(level=logging.INFO, 
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[logging.StreamHandler(sys.stdout), logging.FileHandler("download.log")])
 logger = logging.getLogger(__name__)
+
+import os, gzip, tarfile, wo
+import shutil, glob, struct, hashlib
+import urllib, urllib.parse, urllib.request
+import datetime, argparse, numpy
+from PIL import Image
 
 
 filenames = [
@@ -109,32 +109,37 @@ if __name__ == "__main__":
         logger.warning(f"Parsed unknown args: {unknown}")
 
     w = wo.Orchestrator(
-        is_dev=args.dev,
         default_logs_path="mnist/logs",
         default_params={
             "uri.mnist": "http://yann.lecun.com/exdb/mnist/"
         },
+        dev=args.dev,
     )
     config = w.get_config()
     
     try:
+
+        # Download artifacts
+        pass
 
         # Initialize runtime variables
         pass 
 
         # Execute main script
         result = main(uri=config["uri.mnist"])
+
+        # Prepare variables for logging
         output_data_path = os.path.join(
             args.output_data_path, f"sample-version={result['sample_version']}")
 
-        # Prepare variables for logging
+        # Upload artifacts
         pass 
         
     except Exception as e:
-        logger.exception("Main execution script failed.")
+        logger.exception("Main execution script failed")
     
     finally: 
-        scheme, bucket, path = w._parse_uri(args.output_data_path)
+        scheme, bucket, path = w.parse_uri(args.output_data_path)
         w.log_execution(
             outputs={
                 "output_data_path": output_data_path,

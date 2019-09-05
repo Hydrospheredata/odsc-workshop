@@ -10,9 +10,6 @@ import numpy as np
 import wo
 
 
-
-
-
 def main(hydrosphere_uri, application_name, acceptable_accuracy, sample_size):
     # Prepare data inputs
     with np.load(os.path.join("data", "imgs.npz")) as data:
@@ -50,31 +47,51 @@ if __name__ == "__main__":
     parser.add_argument('--application-name', required=True)
     parser.add_argument('--sample-size', type=int, default=10)
     parser.add_argument('--dev', action='store_true', default=False)
-    args = parser.parse_args()
+    args, unknown = parser.parse_known_args()
+    if unknown: 
+        logger.warning(f"Parsed unknown args: {unknown}")
 
-    # Prepare environment
     w = wo.Orchestrator(
         default_logs_path="mnist/logs",
-        default_params={"uri.hydrosphere": "https://dev.k8s.hydrosphere.io"},
-        is_dev=args.dev,
+        default_params={
+            "uri.hydrosphere": "https://dev.k8s.hydrosphere.io"
+        },
+        dev=args.dev,
     )
-    w.download_prefix(os.path.join(args.data_path, "t10k"), "data/")
+    config = w.get_config()
+    
+    try:
 
-    result = main(
-        acceptable_accuracy=args.acceptable_accuracy,
-        application_name=args.application_name,
-        hydrosphere_uri=w.get_config()["uri.hydrosphere"],
-        sample_size=args.sample_size,
-    )
+        # Download artifacts
+        w.download_prefix(os.path.join(args.data_path, "t10k"), "data/")
 
-    scheme, bucket, path = w._parse_uri(args.data_path)
-    w.log_execution(
-        outputs={"integration_test_accuracy": result["accuracy"]},
-        logs_bucket=f"{scheme}://{bucket}",
-        logs_file="test.log",
-    )
+        # Initialize runtime variables
+        pass
+
+        # Execute main script
+        result = main(
+            acceptable_accuracy=args.acceptable_accuracy,
+            application_name=args.application_name,
+            hydrosphere_uri=config["uri.hydrosphere"],
+            sample_size=args.sample_size,
+        )
+
+        # Prepare variables for logging
+        pass 
+
+        # Upload artifacts 
+        pass
+        
+    except Exception as e:
+        logger.exception("Main execution script failed")
+    
+    finally: 
+        scheme, bucket, path = w.parse_uri(args.data_path)
+        w.log_execution(
+            outputs={"integration_test_accuracy": result["accuracy"]},
+            logs_bucket=f"{scheme}://{bucket}",
+            logs_file="test.log",
+        )
 
     assert result["accuracy"] > args.acceptable_accuracy, \
         f"Accuracy is not acceptable ({result['accuracy']} < {args.acceptable_accuracy})"
-
-    

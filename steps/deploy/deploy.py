@@ -37,11 +37,14 @@ if __name__ == '__main__':
         default_params={
             "uri.hydrosphere": "https://dev.k8s.hydrosphere.io"
         },
-        is_dev=args.dev,
+        dev=args.dev,
     )
     config = w.get_config()
     
     try:
+
+        # Download artifacts
+        pass
 
         # Initialize runtime variables
         hydrosphere_uri = config["uri.hydrosphere"]
@@ -58,12 +61,15 @@ if __name__ == '__main__':
         # Prepare variables for logging
         application_uri = urllib.parse.urljoin(
             config["uri.hydrosphere"], f"applications/{application_name}")
+
+        # Upload artifacts
+        pass 
         
     except Exception as e:
-        logger.exception("Main execution script failed.")
+        logger.exception("Main execution script failed")
     
     finally: 
-        scheme, bucket, path = w._parse_uri(args.data_path)
+        scheme, bucket, path = w.parse_uri(args.data_path)
         w.log_execution(
             outputs={
                 "application_name": application_name,
